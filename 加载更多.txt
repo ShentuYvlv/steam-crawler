@@ -1,0 +1,775 @@
+请求网址
+https://store.steampowered.com//ajaxappreviews/3350200?date_range_type=all&day_range=30&start_date=-1&end_date=-1&cursor=AoJwmZTwzZ0De66x1AY%3D&filter_offtopic_activity=1&playtime_filter_max=0&playtime_filter_min=0&playtime_type=all&purchase_type=all&review_type=all&use_review_quality=1&language=schinese&filter=recent&summary_num_positive_reviews=35853&summary_num_reviews=45001
+请求方法
+GET
+状态代码
+200 OK
+远程地址
+127.0.0.1:7890
+引荐来源网址政策
+strict-origin-when-cross-origin
+cache-control
+private,max-age=600
+connection
+keep-alive
+content-encoding
+gzip
+content-length
+4997
+content-type
+application/json; charset=utf-8
+date
+Mon, 27 Apr 2026 09:12:19 GMT
+expires
+Mon, 26 Jul 1997 05:00:00 GMT
+server
+nginx
+strict-transport-security
+max-age=63072000
+vary
+Accept-Encoding
+x-frame-options
+DENY
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+zh-CN,zh;q=0.9
+connection
+keep-alive
+cookie
+browserid=357615168338588518; sessionid=5c47b2cae2b0c0e1ff08c467; timezoneOffset=28800,0; ak_bmsc=D5538D02BA2764F98995219C026F8D6D~000000000000000000000000000000~YAAQpbvOFx8zQM2dAQAAXDMBzh+DNLx6zhyCbfL6gwEYx9Q6H68hxPyjVwXOEr7HD63sRsRklbxOAdkpl4cMSDZD4bGb7Ku30PEuxa4rbr+r2O4IdXAbInuWk6cj2FcNHLyvkxwZ3XLfCFc1CHlOPkqaV6+ZnvgdZnifIz+TcRQBbMo5OhI0MJdTjUhMXLL83fk+zmNj6h9BlmbTgkSVOaVExQAkgQnpWkd+pSrJZhcd2lU3VJTBSHoa66Ma/oRQdv9ON9tDirktD5wb+nDpZWvFul6B6GBj56e1bnFXeAY52Je88Z5aj9AmVDobIznCwV9sbP8U5PSwq5Ilu2oByh9mR9/s0ijY2mkbG7an3UM3eN8mxOcRnoUFPPtgEICcLiwi/lidmGI=; Steam_Language=schinese; bm_sv=2CE42FD652B28CE2D7B30E9E2F21E9E2~YAAQrbvOFyqwQ82dAQAA0T4Czh8wpwnUZcngT424fgYJ5wd4jTY/CDY95odezOVuXY4x0mx1w+oWBvgyjsJ3C0689XhWsE/X2gvwutcVWEV4hMweah4HQWaT/h5vsqxA/cMnCD6+LT9OjvjKmHamW8jhSm5oRW1sM1wRgqHhAgAducgip3QUHVlKvL1tEtlGhqF4OBIdVWJ5dA/VdkStlhXYbwt1SAZgRLWS46+IU7Je0IlSEUKK5og1omojeUaKm6fB93Mr~1; steamCountry=SG%7C434f7188bf53d3e70c692f0818dc85fd; recentapps=%7B%223350200%22%3A1777281115%2C%22578080%22%3A1777269772%7D; app_impressions=3240220%401_49_4_1587_100757%7C730%401_49_4_1587_salesmartpopularpurchased%7C578080%401_49_4_1587_salesmartpopularpurchased%7C1172470%401_49_4_1587_salesmartpopularpurchased%7C1144200%401_49_4_1587_salesmartpopularpurchased%7C2416450%401_49_4_1587_salesmartpopularpurchased%7C730%401_49_4_1587_salebrowseall%7C3041230%401_7_15__79%7C3357650%401_7_15__79%7C2416450%401_7_15__79%7C3265700%401_7_15__79%7C2887320%401_7_15__13%7C2904200%401_7_15__13%7C3137250%401_7_15__13%7C4368720%401_7_15__13%7C3350200%401_7_15__13%7C4267430%401_7_15__13%7C4267430%401_5_9__405%7C2161700%401_5_9__300%7C3347400%401_5_9__300%7C1113000%401_5_9__300%7C1989270%401_5_9__300%7C4267430%401_5_9__405%7C2161700%401_5_9__300%7C3478050%401_5_9__300%7C3731020%401_5_9__300%7C1989270%401_5_9__300
+host
+store.steampowered.com
+referer
+https://store.steampowered.com/app/3350200/_/
+sec-ch-ua
+"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"macOS"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-origin
+user-agent
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36
+
+payload:
+date_range_type=all&day_range=30&start_date=-1&end_date=-1&cursor=AoJwmZTwzZ0De66x1AY%3D&filter_offtopic_activity=1&playtime_filter_max=0&playtime_filter_min=0&playtime_type=all&purchase_type=all&review_type=all&use_review_quality=1&language=schinese&filter=recent&summary_num_positive_reviews=35853&summary_num_reviews=45001
+
+{
+    "success": 1,
+    "cAppRecommendationCount": 49470,
+    "reviews": [
+        {
+            "recommendationid": "223434530",
+            "author": {
+                "steamid": "76561199084178036",
+                "personaname": "lae",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/id/shujia/",
+                "num_games_owned": 2240,
+                "num_reviews": 14,
+                "playtime_forever": 678,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 678,
+                "last_played": 1774268403,
+                "avatar": "bf2652bb5b1b6e826b86a230cebc11dbfa78badf"
+            },
+            "language": "schinese",
+            "review": "表面包裹着一层理智与野心的树皮，作为自己在外界行走之人设，时刻对自己心理暗示，是认同自己的观点才进而的自己，而非主动物化。\n\n实际上动辄几十万消费的人早已见过风浪，女孩想什么几乎是一眼见底，嘴上说自己很少物欲，但脖子上闪闪发光的logo早就给出了答案。\n\n没说女孩就不能戴上项链之枷锁，而说你消费着与自己无关的产品又说没什么物欲，这才是价值观的出入。\n\n但，这没有错。矛盾本没错。老马识途。唉经典老马。唉聊戏莽夫。\n\n人都喜欢给自己的故事或价值披上一件神圣的外衣，这叫记叙文，从小学到大：\n\n可以贱，可以太溅。这叫发散性思维。\n\n践行初心，牢记使命。这叫奋斗型人格。\n\n我说，小学王朝了。这叫动物形逻辑。\n\n乘着大树见过片刻树冠上的风景，很正常。\n\n妄念自己也会在某一天成了大树，这同样也很正常。\n\n但对自己的生长是toxic的。吃多了会上火，那便夜夜燃烧。\n\n这样的女孩太多，十年二十年往矣，何不泯然众人，何再青春活泼。时间之答案，她们的故事总会希声。\n\n翻来覆去的那些话，多了自然无趣，如阅眼前有你。\n\n如此覆辙？\n\n狎之无禁，猎之不竭，皮囊之无尽藏也，而淫与子之所共饫。\n\n实摇镪之茎，槁于根蠹；终逐臭之蝇，溺于膏腥。\n\n再回来，又何必囿于一方“碧玉”。鸡同狗，男如是。\n\n26.04.16",
+            "timestamp_created": 1776421884,
+            "timestamp_updated": 1776422664,
+            "voted_up": true,
+            "votes_up": 4,
+            "votes_funny": 0,
+            "weighted_vote_score": "0.546980977058410645",
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223422326",
+            "author": {
+                "steamid": "76561198374658734",
+                "personaname": "Mayuyu",
+                "persona_status": "online",
+                "profile_url": "https://steamcommunity.com/profiles/76561198374658734/",
+                "num_games_owned": 43,
+                "num_reviews": 19,
+                "playtime_forever": 1216,
+                "playtime_last_two_weeks": 1107,
+                "playtime_at_review": 750,
+                "last_played": 1776615270,
+                "avatar": "12a01eaa55c77d524d64006895aa5f0a5e002001"
+            },
+            "language": "schinese",
+            "review": "真爱至上，何尝不是一种反捞？",
+            "timestamp_created": 1776405886,
+            "timestamp_updated": 1776405886,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223394079",
+            "author": {
+                "steamid": "76561198313090230",
+                "personaname": "胡总",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198313090230/",
+                "num_games_owned": 0,
+                "num_reviews": 4,
+                "playtime_forever": 2049,
+                "playtime_last_two_weeks": 496,
+                "playtime_at_review": 1649,
+                "last_played": 1776776838,
+                "avatar": "0e9f6c4a0cdddfe0cd9fadbff90e8db4f831984b"
+            },
+            "language": "schinese",
+            "review": "音乐一响 反捞白讲 旧情复燃 她不一样",
+            "timestamp_created": 1776368262,
+            "timestamp_updated": 1776368262,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "hardware": {
+                "manufacturer": "Micro-Star International Co., Ltd.",
+                "model": "MS-7D99",
+                "dx_video_card": "NVIDIA GeForce RTX 4070 SUPER",
+                "dx_vendorid": 4318,
+                "dx_deviceid": 10115,
+                "num_gpu": 1,
+                "system_ram": "32607",
+                "os": "Windows 11",
+                "cpu_vendor": "GenuineIntel",
+                "cpu_name": "Intel(R) Core(TM) i5-14600KF",
+                "gaming_device_type": 1,
+                "dx_driver_version": "32.0.15.8180",
+                "adapter_description": "NVIDIA GeForce RTX 4070 SUPER",
+                "driver_version": "32.0.15.8180",
+                "driver_date": "2025-10-29",
+                "vram_size": 11999,
+                "screen_width": null,
+                "screen_height": null
+            },
+            "reactions": []
+        },
+        {
+            "recommendationid": "223293584",
+            "author": {
+                "steamid": "76561199101054318",
+                "personaname": "温柔留给02",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199101054318/",
+                "num_games_owned": 37,
+                "num_reviews": 4,
+                "playtime_forever": 193,
+                "playtime_last_two_weeks": 193,
+                "playtime_at_review": 193,
+                "last_played": 1776232807,
+                "avatar": "757000e3692c9975424ecdb8b85ae8512797fbf2"
+            },
+            "language": "schinese",
+            "review": "酒吧直接封神，我哭死好吧",
+            "timestamp_created": 1776239181,
+            "timestamp_updated": 1776239181,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": false,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223237362",
+            "author": {
+                "steamid": "76561199538321948",
+                "personaname": "沧浪之水",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199538321948/",
+                "num_games_owned": 11,
+                "num_reviews": 6,
+                "playtime_forever": 512,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 512,
+                "last_played": 1751294260,
+                "avatar": "c3502027529a6c161bda1ae083abe4fd9462caf0"
+            },
+            "language": "schinese",
+            "review": "剧情紧凑，环环相扣。",
+            "timestamp_created": 1776168360,
+            "timestamp_updated": 1776168360,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223233258",
+            "author": {
+                "steamid": "76561198868109242",
+                "personaname": "19829968",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198868109242/",
+                "num_games_owned": 0,
+                "num_reviews": 6,
+                "playtime_forever": 1694,
+                "playtime_last_two_weeks": 537,
+                "playtime_at_review": 1325,
+                "last_played": 1776337184,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "反诈看档案",
+            "timestamp_created": 1776162270,
+            "timestamp_updated": 1776162270,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223230824",
+            "author": {
+                "steamid": "76561199869138166",
+                "personaname": "权cz",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199869138166/",
+                "num_games_owned": 0,
+                "num_reviews": 1,
+                "playtime_forever": 593,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 593,
+                "last_played": 1762768155,
+                "avatar": "5eec9e3a6c6fa3cef2871cb21532e08adaa0a9c5"
+            },
+            "language": "schinese",
+            "review": "原这个世界没有捞女，所有人都被诚信对待",
+            "timestamp_created": 1776158198,
+            "timestamp_updated": 1776158198,
+            "voted_up": true,
+            "votes_up": 2,
+            "votes_funny": 0,
+            "weighted_vote_score": "0.525707781314849854",
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "hardware": {
+                "manufacturer": "Gigabyte Technology Co., Ltd.",
+                "model": "B660M D2H DDR4",
+                "dx_video_card": "NVIDIA GeForce RTX 4060",
+                "dx_vendorid": 4318,
+                "dx_deviceid": 10370,
+                "num_gpu": 1,
+                "system_ram": "32604",
+                "os": "Windows 10",
+                "cpu_vendor": "GenuineIntel",
+                "cpu_name": "12th Gen Intel(R) Core(TM) i7-12700KF",
+                "gaming_device_type": 1,
+                "dx_driver_version": "32.0.15.7283",
+                "adapter_description": "NVIDIA GeForce RTX 4060",
+                "driver_version": "32.0.15.7283",
+                "driver_date": "2025-3-14",
+                "vram_size": 7957,
+                "screen_width": null,
+                "screen_height": null
+            },
+            "reactions": []
+        },
+        {
+            "recommendationid": "223178867",
+            "author": {
+                "steamid": "76561199573858321",
+                "personaname": "镜花水月",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199573858321/",
+                "num_games_owned": 81,
+                "num_reviews": 52,
+                "playtime_forever": 311,
+                "playtime_last_two_weeks": 64,
+                "playtime_at_review": 311,
+                "last_played": 1776088005,
+                "avatar": "8ce45ed8a36bf7b38a2ddc8da3301d5ce84a9ffa"
+            },
+            "language": "schinese",
+            "review": "可以可以\n",
+            "timestamp_created": 1776088173,
+            "timestamp_updated": 1777269784,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": false,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223174028",
+            "author": {
+                "steamid": "76561198145053887",
+                "personaname": "小式式",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198145053887/",
+                "num_games_owned": 186,
+                "num_reviews": 15,
+                "playtime_forever": 863,
+                "playtime_last_two_weeks": 222,
+                "playtime_at_review": 640,
+                "last_played": 1776098745,
+                "avatar": "3e207b20e55af2f09d1c3fc1be4ea23ec116f39d"
+            },
+            "language": "schinese",
+            "review": "影游还是挺好玩的，这个题材也很不错，所以基本上没什么缺陷，很有意思，演员也很会演",
+            "timestamp_created": 1776082450,
+            "timestamp_updated": 1776082450,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": false,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "hardware": {
+                "manufacturer": "System manufacturer",
+                "model": "System Product Name",
+                "dx_video_card": "NVIDIA GeForce GTX 750 Ti",
+                "dx_vendorid": 4318,
+                "dx_deviceid": 4992,
+                "num_gpu": 1,
+                "system_ram": "16299",
+                "os": "Windows 10",
+                "cpu_vendor": "GenuineIntel",
+                "cpu_name": "Intel(R) Core(TM) i5-6500 CPU @ 3.20GHz",
+                "gaming_device_type": 1,
+                "dx_driver_version": "31.0.15.3623",
+                "adapter_description": "NVIDIA GeForce GTX 750 Ti",
+                "driver_version": "31.0.15.3623",
+                "driver_date": "2023-6-8",
+                "vram_size": 2006,
+                "screen_width": null,
+                "screen_height": null
+            },
+            "reactions": []
+        },
+        {
+            "recommendationid": "223148375",
+            "author": {
+                "steamid": "76561199008097647",
+                "personaname": "876370052",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199008097647/",
+                "num_games_owned": 0,
+                "num_reviews": 2,
+                "playtime_forever": 1183,
+                "playtime_last_two_weeks": 531,
+                "playtime_at_review": 657,
+                "last_played": 1776349388,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "深层次原因，还是资本对人的异化和压迫",
+            "timestamp_created": 1776038581,
+            "timestamp_updated": 1776317070,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223117110",
+            "author": {
+                "steamid": "76561198087010556",
+                "personaname": "Kyle",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/id/KyleSpears/",
+                "num_games_owned": 774,
+                "num_reviews": 87,
+                "playtime_forever": 588,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 588,
+                "last_played": 1776008534,
+                "avatar": "f5d3dc74bf6a080d7ab9d3423532aab781878673"
+            },
+            "language": "schinese",
+            "review": "欣欣假死之后，所有的反诈都是扯蛋",
+            "timestamp_created": 1776009412,
+            "timestamp_updated": 1776009412,
+            "voted_up": true,
+            "votes_up": 2,
+            "votes_funny": 0,
+            "weighted_vote_score": "0.529780566692352295",
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223106245",
+            "author": {
+                "steamid": "76561198831293447",
+                "personaname": "XuLao",
+                "persona_status": "in-game",
+                "profile_url": "https://steamcommunity.com/profiles/76561198831293447/",
+                "num_games_owned": 113,
+                "num_reviews": 3,
+                "playtime_forever": 877,
+                "playtime_last_two_weeks": 94,
+                "playtime_at_review": 783,
+                "last_played": 1776308654,
+                "avatar": "19c6fa0ba96030c8cc25130dca324362ee965212"
+            },
+            "language": "schinese",
+            "review": "第三章神中神 希望能出第二部",
+            "timestamp_created": 1776000778,
+            "timestamp_updated": 1776000778,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223103401",
+            "author": {
+                "steamid": "76561199434232510",
+                "personaname": "kelizahuopu",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199434232510/",
+                "num_games_owned": 0,
+                "num_reviews": 1,
+                "playtime_forever": 999,
+                "playtime_last_two_weeks": 34,
+                "playtime_at_review": 796,
+                "last_played": 1776091342,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "游戏很有趣，尤其是前面的三四章，特别精彩。一句话，音乐一响、反捞白讲，旧情复燃，她不一样",
+            "timestamp_created": 1775998230,
+            "timestamp_updated": 1775998230,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223095520",
+            "author": {
+                "steamid": "76561198799917425",
+                "personaname": "2979692158",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198799917425/",
+                "num_games_owned": 0,
+                "num_reviews": 1,
+                "playtime_forever": 3645,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 3645,
+                "last_played": 1775990006,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "这个游戏的好还需要理由吗？",
+            "timestamp_created": 1775990043,
+            "timestamp_updated": 1775990043,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223087694",
+            "author": {
+                "steamid": "76561198154302313",
+                "personaname": "佐佐木李子重度依赖",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198154302313/",
+                "num_games_owned": 94,
+                "num_reviews": 8,
+                "playtime_forever": 843,
+                "playtime_last_two_weeks": 47,
+                "playtime_at_review": 796,
+                "last_played": 1777043381,
+                "avatar": "fe9ae0a2950b7f8b65bf36dc0475997eb6c47bfe"
+            },
+            "language": "schinese",
+            "review": "第三章神中神",
+            "timestamp_created": 1775981094,
+            "timestamp_updated": 1775981094,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223086291",
+            "author": {
+                "steamid": "76561198402075201",
+                "personaname": "玉 皇 大 帝",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198402075201/",
+                "num_games_owned": 25,
+                "num_reviews": 1,
+                "playtime_forever": 1992,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 1133,
+                "last_played": 1776063742,
+                "avatar": "86530936e2c6c54d5fcd083d440a04496d8f2026"
+            },
+            "language": "schinese",
+            "review": "第四章开始开始拉托大的了",
+            "timestamp_created": 1775979247,
+            "timestamp_updated": 1775979247,
+            "voted_up": false,
+            "votes_up": 2,
+            "votes_funny": 0,
+            "weighted_vote_score": "0.505494534969329834",
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223079492",
+            "author": {
+                "steamid": "76561198994434534",
+                "personaname": "524952005",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198994434534/",
+                "num_games_owned": 0,
+                "num_reviews": 2,
+                "playtime_forever": 493,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 320,
+                "last_played": 1775984019,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "剧情很赞，很有教育意义",
+            "timestamp_created": 1775970528,
+            "timestamp_updated": 1775970528,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223074941",
+            "author": {
+                "steamid": "76561199545099498",
+                "personaname": "啥也不是",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199545099498/",
+                "num_games_owned": 63,
+                "num_reviews": 6,
+                "playtime_forever": 1697,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 1609,
+                "last_played": 1775970129,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "好玩",
+            "timestamp_created": 1775965153,
+            "timestamp_updated": 1775965153,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223025709",
+            "author": {
+                "steamid": "76561199642133977",
+                "personaname": "少年不懂爱",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561199642133977/",
+                "num_games_owned": 138,
+                "num_reviews": 30,
+                "playtime_forever": 1199,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 1199,
+                "last_played": 1753594292,
+                "avatar": "148ff422f2245ab66abfeabf3f7506861d6b703b"
+            },
+            "language": "schinese",
+            "review": "两年多的感情，被无缝衔接，分手后这个游戏就出来了，马上购买，虽然游戏不是我喜欢的类型，但是可以让我们男性朋友在多个角度看待问题，游戏里面也有很多兄弟们的感情经历分享，也会教不懂的兄弟们学习一下泡妞知识，值得玩一下",
+            "timestamp_created": 1775918078,
+            "timestamp_updated": 1775918078,
+            "voted_up": true,
+            "votes_up": 0,
+            "votes_funny": 0,
+            "weighted_vote_score": 0.5,
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        },
+        {
+            "recommendationid": "223020007",
+            "author": {
+                "steamid": "76561198097893480",
+                "personaname": "799530320",
+                "persona_status": "offline",
+                "profile_url": "https://steamcommunity.com/profiles/76561198097893480/",
+                "num_games_owned": 40,
+                "num_reviews": 2,
+                "playtime_forever": 257,
+                "playtime_last_two_weeks": 0,
+                "playtime_at_review": 257,
+                "last_played": 1775913119,
+                "avatar": "fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb"
+            },
+            "language": "schinese",
+            "review": "剧情强行推动，人物行动的逻辑感很差，有些明显有差异的选项最后只影响了好感度，后续竟然衔接上了完全一样的剧情，加上演技并不好，完全没有代入感",
+            "timestamp_created": 1775913290,
+            "timestamp_updated": 1775913290,
+            "voted_up": false,
+            "votes_up": 2,
+            "votes_funny": 0,
+            "weighted_vote_score": "0.512195110321044922",
+            "comment_count": 0,
+            "steam_purchase": true,
+            "received_for_free": false,
+            "refunded": false,
+            "written_during_early_access": false,
+            "primarily_steam_deck": false,
+            "app_release_date": "1750320768",
+            "reactions": []
+        }
+    ],
+    "rgReviewTags": [],
+    "query_summary": {
+        "num_reviews": 20
+    },
+    "cursor": "AoJwkcmrvp0Dd77g0gY="
+}

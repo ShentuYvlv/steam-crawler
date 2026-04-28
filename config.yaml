@@ -15,3 +15,12 @@ http:
 output:
   data_dir: ./data        # 数据输出目录
   checkpoint_file: .checkpoint.json  # 断点文件
+
+comments:
+  language: schinese      # 评论语言：schinese / english / all
+  filter: recent          # 显示顺序：summary / valuable / recent / funny
+  review_type: all        # 评论类型：all / positive / negative
+  purchase_type: all      # 购买来源：all / steam / non_steam_purchase
+  per_page: 100           # 每页评论数量，1-100
+  limit: 0                # 每个游戏最多抓取多少条，0 表示尽量抓取全部
+  use_review_quality: true # 使用新的评测价值系统

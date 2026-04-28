@@ -162,6 +162,7 @@ python main.py reviews --input appids.txt
 ### 抓取逐条用户评论：`comments`
 
 此命令使用 Steam 页面加载评论时的 `ajaxappreviews` 接口，不需要 Cookie、登录态或 API Key。
+默认筛选参数来自 `config.yaml` 里的 `comments:` 配置段，命令行传参会覆盖配置值。
 
 ```bash
 python main.py comments --appid 730 --file data/comments_730.json

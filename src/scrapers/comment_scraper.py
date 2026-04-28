@@ -40,6 +40,7 @@ class CommentScraper:
         review_type: str,
         purchase_type: str,
         num_per_page: int,
+        use_review_quality: bool,
     ) -> dict[str, Any]:
         return {
             "date_range_type": "all",
@@ -53,7 +54,7 @@ class CommentScraper:
             "playtime_type": "all",
             "purchase_type": purchase_type,
             "review_type": review_type,
-            "use_review_quality": "1",
+            "use_review_quality": "1" if use_review_quality else "0",
             "language": language,
             "filter": filter_type,
             "num_per_page": str(num_per_page),
@@ -68,6 +69,7 @@ class CommentScraper:
         review_type: str = "all",
         purchase_type: str = "all",
         num_per_page: int = 100,
+        use_review_quality: bool = True,
     ) -> dict[str, Any]:
         """抓取单个游戏的逐条评论。"""
         url = f"https://store.steampowered.com/ajaxappreviews/{app_id}"
@@ -87,6 +89,7 @@ class CommentScraper:
                 review_type=review_type,
                 purchase_type=purchase_type,
                 num_per_page=num_per_page,
+                use_review_quality=use_review_quality,
             )
             data = await self.client.get_json(url, params=params)
 

@@ -105,6 +105,25 @@ def _get_target_app_ids(args: argparse.Namespace) -> list[int]:
     return app_ids
 
 
+def _resolve_comments_options(
+    config: Config, args: argparse.Namespace
+) -> dict[str, int | str | bool | None]:
+    """合并 config.yaml 与命令行的真实评论抓取参数。"""
+    comments = config.comments
+    limit = comments.limit if args.limit is None else args.limit
+    return {
+        "language": comments.language if args.language is None else args.language,
+        "filter": comments.filter if args.filter is None else args.filter,
+        "review_type": comments.review_type if args.review_type is None else args.review_type,
+        "purchase_type": (
+            comments.purchase_type if args.purchase_type is None else args.purchase_type
+        ),
+        "per_page": comments.per_page if args.per_page is None else args.per_page,
+        "limit": limit,
+        "use_review_quality": comments.use_review_quality,
+    }
+
+
 def main() -> None:
     """主入口函数。"""
     parser = argparse.ArgumentParser(
@@ -245,38 +264,38 @@ def main() -> None:
         type=_parse_non_negative_int,
         default=None,
         metavar="N",
-        help="每个游戏最多抓取 N 条评论；不指定则抓取全部，0 也表示全部",
+        help="每个游戏最多抓取 N 条评论；不指定则使用 config.yaml，0 表示尽量抓取全部",
     )
     comments_parser.add_argument(
         "--language",
         type=str,
-        default="schinese",
-        help="评论语言，默认 schinese；可用 all 抓取全部语言",
+        default=None,
+        help="评论语言；不指定则使用 config.yaml，可用 all 抓取全部语言",
     )
     comments_parser.add_argument(
         "--filter",
         type=str,
-        default="recent",
-        help="评论排序/过滤方式，默认 recent",
+        default=None,
+        help="评论排序/过滤方式；不指定则使用 config.yaml",
     )
     comments_parser.add_argument(
         "--review-type",
         choices=["all", "positive", "negative"],
-        default="all",
-        help="评论类型过滤，默认 all",
+        default=None,
+        help="评论类型过滤；不指定则使用 config.yaml",
     )
     comments_parser.add_argument(
         "--purchase-type",
         choices=["all", "steam", "non_steam_purchase"],
-        default="all",
-        help="购买来源过滤，默认 all",
+        default=None,
+        help="购买来源过滤；不指定则使用 config.yaml",
     )
     comments_parser.add_argument(
         "--per-page",
         type=_parse_page_size,
-        default=100,
+        default=None,
         metavar="N",
-        help="每页请求数量，1-100，默认 100",
+        help="每页请求数量，1-100；不指定则使用 config.yaml",
     )
 
     # 完整流程命令
@@ -745,7 +764,9 @@ async def run_comments_scraper_async(
         seen_appids.add(app_id)
         unique_app_ids.append(app_id)
 
-    limit = None if args.limit == 0 else args.limit
+    comment_options = _resolve_comments_options(config, args)
+    limit_value = comment_options["limit"]
+    limit = None if limit_value == 0 else limit_value
     output_path = _get_comments_output_path(config, args, unique_app_ids)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -765,11 +786,12 @@ async def run_comments_scraper_async(
                     result = await scraper.scrape_app_comments(
                         app_id=app_id,
                         limit=limit,
-                        language=args.language,
-                        filter_type=args.filter,
-                        review_type=args.review_type,
-                        purchase_type=args.purchase_type,
-                        num_per_page=args.per_page,
+                        language=comment_options["language"],
+                        filter_type=comment_options["filter"],
+                        review_type=comment_options["review_type"],
+                        purchase_type=comment_options["purchase_type"],
+                        num_per_page=comment_options["per_page"],
+                        use_review_quality=comment_options["use_review_quality"],
                     )
                     results.append(result)
                     failure_manager.remove_failure("comment", app_id)
@@ -785,12 +807,13 @@ async def run_comments_scraper_async(
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "https://store.steampowered.com/ajaxappreviews/{app_id}",
         "filters": {
-            "language": args.language,
-            "filter": args.filter,
-            "review_type": args.review_type,
-            "purchase_type": args.purchase_type,
+            "language": comment_options["language"],
+            "filter": comment_options["filter"],
+            "review_type": comment_options["review_type"],
+            "purchase_type": comment_options["purchase_type"],
             "limit": limit,
-            "per_page": args.per_page,
+            "per_page": comment_options["per_page"],
+            "use_review_quality": comment_options["use_review_quality"],
         },
         "games": results,
     }

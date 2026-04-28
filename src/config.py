@@ -72,6 +72,19 @@ class OutputConfig:
 
 
 @dataclass
+class CommentsConfig:
+    """真实评论抓取配置。"""
+
+    language: str = "schinese"
+    filter: str = "recent"
+    review_type: str = "all"
+    purchase_type: str = "all"
+    per_page: int = 100
+    limit: int = 0
+    use_review_quality: bool = True
+
+
+@dataclass
 class Config:
     """全局配置。
 
@@ -84,6 +97,7 @@ class Config:
     http: HttpConfig = field(default_factory=HttpConfig)
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
+    comments: CommentsConfig = field(default_factory=CommentsConfig)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -98,11 +112,13 @@ class Config:
         http_data = data.get("http", {})
         scraper_data = data.get("scraper", {})
         output_data = data.get("output", {})
+        comments_data = data.get("comments", {})
 
         return cls(
             http=HttpConfig(**http_data),
             scraper=ScraperConfig(**scraper_data),
             output=OutputConfig(**output_data),
+            comments=CommentsConfig(**comments_data),
         )
 
     @classmethod

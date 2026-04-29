@@ -72,6 +72,34 @@ python -m app.cli.import_stock_reviews \
   --dry-run
 ```
 
+## Steam 增量同步
+
+后端已封装现有 `src.scrapers.comment_scraper.CommentScraper`，不会重新实现 Steam 请求逻辑。手动同步接口：
+
+```bash
+curl -X POST http://localhost:8000/api/reviews/sync \
+  -H "Content-Type: application/json" \
+  -d '{
+    "app_id": 3350200,
+    "limit": 100,
+    "language": "schinese",
+    "filter": "recent",
+    "review_type": "all",
+    "purchase_type": "all",
+    "use_review_quality": true,
+    "per_page": 100
+  }'
+```
+
+查询同步任务：
+
+```bash
+curl http://localhost:8000/api/reviews/sync-jobs
+curl http://localhost:8000/api/reviews/sync-jobs/1
+```
+
+同步结果写入 `steam_reviews`，新增数据标记为 `sync_type=incremental`、`source_type=steam_api`，并继续使用 `recommendation_id` 去重。
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。

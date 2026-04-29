@@ -4,10 +4,24 @@ from app.schemas.review_sync import (
     SyncJobDetailResponse,
     SyncJobListItem,
 )
+from app.schemas.reviews import (
+    BulkReviewStatusUpdateRequest,
+    ReviewDetailResponse,
+    ReviewListItem,
+    ReviewListResponse,
+    ReviewStatusUpdateRequest,
+    ReviewStatusUpdateResponse,
+)
 
 __all__ = [
+    "BulkReviewStatusUpdateRequest",
+    "ReviewDetailResponse",
+    "ReviewListItem",
+    "ReviewListResponse",
     "ReviewSyncRequest",
     "ReviewSyncResponse",
+    "ReviewStatusUpdateRequest",
+    "ReviewStatusUpdateResponse",
     "SyncJobDetailResponse",
     "SyncJobListItem",
 ]

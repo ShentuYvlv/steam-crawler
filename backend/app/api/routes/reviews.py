@@ -1,12 +1,18 @@
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, select
+from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
-from app.models import SyncJob
+from app.models import SteamReview, SyncJob
 from app.schemas import (
+    BulkReviewStatusUpdateRequest,
+    ReviewDetailResponse,
+    ReviewListResponse,
+    ReviewStatusUpdateRequest,
+    ReviewStatusUpdateResponse,
     ReviewSyncRequest,
     ReviewSyncResponse,
     SyncJobDetailResponse,
@@ -16,6 +22,69 @@ from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
+
+
+@router.get("", response_model=ReviewListResponse)
+async def list_reviews(
+    session: SessionDependency,
+    app_id: int | None = Query(default=None, gt=0),
+    voted_up: bool | None = None,
+    min_votes_up: int | None = Query(default=None, ge=0),
+    max_votes_up: int | None = Query(default=None, ge=0),
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    min_playtime: float | None = Query(default=None, ge=0),
+    max_playtime: float | None = Query(default=None, ge=0),
+    processing_status: str | None = None,
+    reply_status: str | None = None,
+    keyword: str | None = None,
+    sort_by: str = Query(default="timestamp_created"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=200),
+) -> ReviewListResponse:
+    statement = _apply_review_filters(
+        select(SteamReview),
+        app_id=app_id,
+        voted_up=voted_up,
+        min_votes_up=min_votes_up,
+        max_votes_up=max_votes_up,
+        created_from=created_from,
+        created_to=created_to,
+        min_playtime=min_playtime,
+        max_playtime=max_playtime,
+        processing_status=processing_status,
+        reply_status=reply_status,
+        keyword=keyword,
+    )
+    count_statement = _apply_review_filters(
+        select(func.count(SteamReview.id)),
+        app_id=app_id,
+        voted_up=voted_up,
+        min_votes_up=min_votes_up,
+        max_votes_up=max_votes_up,
+        created_from=created_from,
+        created_to=created_to,
+        min_playtime=min_playtime,
+        max_playtime=max_playtime,
+        processing_status=processing_status,
+        reply_status=reply_status,
+        keyword=keyword,
+    )
+    total = await session.scalar(count_statement)
+    sort_column = _get_review_sort_column(sort_by)
+    sort_expression = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    result = await session.execute(
+        statement.order_by(sort_expression, desc(SteamReview.id))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
+    return ReviewListResponse(
+        items=list(result.scalars().all()),
+        total=total or 0,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @router.post("/sync", response_model=ReviewSyncResponse)
@@ -67,3 +136,119 @@ async def get_sync_job(
     if sync_job is None:
         raise HTTPException(status_code=404, detail="Sync job not found")
     return sync_job
+
+
+@router.post("/bulk-status", response_model=ReviewStatusUpdateResponse)
+async def bulk_update_review_status(
+    request: BulkReviewStatusUpdateRequest,
+    session: SessionDependency,
+) -> ReviewStatusUpdateResponse:
+    values = _status_update_values(request)
+    if not values:
+        raise HTTPException(status_code=400, detail="No status fields provided")
+
+    result = await session.execute(
+        update(SteamReview).where(SteamReview.id.in_(request.review_ids)).values(**values)
+    )
+    await session.commit()
+    return ReviewStatusUpdateResponse(updated_count=result.rowcount or 0)
+
+
+@router.get("/{review_id}", response_model=ReviewDetailResponse)
+async def get_review(
+    review_id: int,
+    session: SessionDependency,
+) -> SteamReview:
+    review = await session.get(SteamReview, review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+    return review
+
+
+@router.patch("/{review_id}/status", response_model=ReviewStatusUpdateResponse)
+async def update_review_status(
+    review_id: int,
+    request: ReviewStatusUpdateRequest,
+    session: SessionDependency,
+) -> ReviewStatusUpdateResponse:
+    values = _status_update_values(request)
+    if not values:
+        raise HTTPException(status_code=400, detail="No status fields provided")
+
+    review = await session.get(SteamReview, review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+
+    for key, value in values.items():
+        setattr(review, key, value)
+    await session.commit()
+    return ReviewStatusUpdateResponse(updated_count=1)
+
+
+def _apply_review_filters(
+    statement: Select,
+    *,
+    app_id: int | None,
+    voted_up: bool | None,
+    min_votes_up: int | None,
+    max_votes_up: int | None,
+    created_from: datetime | None,
+    created_to: datetime | None,
+    min_playtime: float | None,
+    max_playtime: float | None,
+    processing_status: str | None,
+    reply_status: str | None,
+    keyword: str | None,
+) -> Select:
+    if app_id is not None:
+        statement = statement.where(SteamReview.app_id == app_id)
+    if voted_up is not None:
+        statement = statement.where(SteamReview.voted_up == voted_up)
+    if min_votes_up is not None:
+        statement = statement.where(SteamReview.votes_up >= min_votes_up)
+    if max_votes_up is not None:
+        statement = statement.where(SteamReview.votes_up <= max_votes_up)
+    if created_from:
+        statement = statement.where(SteamReview.timestamp_created >= created_from)
+    if created_to:
+        statement = statement.where(SteamReview.timestamp_created <= created_to)
+    if min_playtime is not None:
+        statement = statement.where(SteamReview.playtime_forever >= min_playtime)
+    if max_playtime is not None:
+        statement = statement.where(SteamReview.playtime_forever <= max_playtime)
+    if processing_status:
+        statement = statement.where(SteamReview.processing_status == processing_status)
+    if reply_status:
+        statement = statement.where(SteamReview.reply_status == reply_status)
+    if keyword:
+        pattern = f"%{keyword.strip()}%"
+        statement = statement.where(
+            or_(
+                SteamReview.review_text.ilike(pattern),
+                SteamReview.persona_name.ilike(pattern),
+                SteamReview.recommendation_id.ilike(pattern),
+                SteamReview.steam_id.ilike(pattern),
+            )
+        )
+    return statement
+
+
+def _get_review_sort_column(sort_by: str):
+    sort_columns = {
+        "votes_up": SteamReview.votes_up,
+        "timestamp_created": SteamReview.timestamp_created,
+        "playtime_forever": SteamReview.playtime_forever,
+        "playtime_at_review": SteamReview.playtime_at_review,
+    }
+    return sort_columns.get(sort_by, SteamReview.timestamp_created)
+
+
+def _status_update_values(
+    request: ReviewStatusUpdateRequest | BulkReviewStatusUpdateRequest,
+) -> dict[str, str]:
+    values = {}
+    if request.processing_status is not None:
+        values["processing_status"] = request.processing_status
+    if request.reply_status is not None:
+        values["reply_status"] = request.reply_status
+    return values

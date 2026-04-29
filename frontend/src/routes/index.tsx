@@ -1,4 +1,4 @@
-import { createRoute } from "@tanstack/react-router";
+import { Link, createRoute } from "@tanstack/react-router";
 import { BarChart3, Bot, CheckCircle2, RefreshCcw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -29,7 +29,7 @@ const workflowItems = [
 
 function DashboardHome() {
   return (
-    <main className="min-h-screen bg-zinc-50 text-zinc-950">
+    <main>
       <section className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8">
         <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 md:flex-row md:items-end md:justify-between">
           <div>
@@ -41,7 +41,9 @@ function DashboardHome() {
               第一阶段工程基线已建立，后续会逐步接入评论入库、筛选、AI 生成、审核发送和统计。
             </p>
           </div>
-          <Button type="button">进入评论列表</Button>
+          <Button asChild type="button">
+            <Link to="/reviews">进入评论列表</Link>
+          </Button>
         </header>
 
         <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -63,4 +65,3 @@ export const indexRoute = createRoute({
   path: "/",
   component: DashboardHome
 });
-

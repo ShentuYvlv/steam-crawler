@@ -100,6 +100,33 @@ curl http://localhost:8000/api/reviews/sync-jobs/1
 
 同步结果写入 `steam_reviews`，新增数据标记为 `sync_type=incremental`、`source_type=steam_api`，并继续使用 `recommendation_id` 去重。
 
+## 评论列表与筛选
+
+评论后台页面：
+
+```bash
+http://localhost:5173/reviews
+```
+
+后端查询接口：
+
+```bash
+curl "http://localhost:8000/api/reviews?app_id=3350200&voted_up=false&keyword=差评&sort_by=votes_up&sort_order=desc&page=1&page_size=50"
+curl http://localhost:8000/api/reviews/1
+```
+
+状态标记接口：
+
+```bash
+curl -X PATCH http://localhost:8000/api/reviews/1/status \
+  -H "Content-Type: application/json" \
+  -d '{"processing_status":"on_hold"}'
+
+curl -X POST http://localhost:8000/api/reviews/bulk-status \
+  -H "Content-Type: application/json" \
+  -d '{"review_ids":[1,2,3],"processing_status":"ignored"}'
+```
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。

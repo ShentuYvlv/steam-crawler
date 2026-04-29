@@ -507,11 +507,12 @@ def main() -> None:
     ui = UIManager()
 
     # 显示 Banner
-    ui.print_panel(
-        "[bold white]Simple Steam Scraper (AsyncIO)[/bold white]\n"
-        "[dim]github.com/SeraphinaGlacia/steam-scraper[/dim]",
-        style="header",
-    )
+    if args.command != "reply-comments":
+        ui.print_panel(
+            "[bold white]Simple Steam Scraper (AsyncIO)[/bold white]\n"
+            "[dim]github.com/SeraphinaGlacia/steam-scraper[/dim]",
+            style="header",
+        )
 
     stop_event = threading.Event()
 

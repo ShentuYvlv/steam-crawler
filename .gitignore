@@ -10,8 +10,6 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
 parts/
 sdist/
 var/
@@ -49,6 +47,18 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+*.tsbuildinfo
+
+# Tool caches
+.pytest_cache/
+.ruff_cache/
+htmlcov/
 
 # Others
 scripts/

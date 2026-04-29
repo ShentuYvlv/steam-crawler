@@ -43,6 +43,35 @@
 - 后续 Steam API 同步只抓取最新增量评论，避免重复处理全部历史评论。
 - 删除诉求先记录为待处理业务状态，不直接调用 Steam 删除接口。
 
+## 存量 CSV 导入
+
+先执行数据库迁移：
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+导入当前全部评论 CSV：
+
+```bash
+cd backend
+python -m app.cli.import_stock_reviews \
+  --file "../data/情感反诈模拟器-steam评论 - 全部评论.csv" \
+  --app-id 3350200
+```
+
+如果只想验证字段解析，不写入数据库：
+
+```bash
+cd backend
+python -m app.cli.import_stock_reviews \
+  --file "../data/情感反诈模拟器-steam评论 - 全部评论.csv" \
+  --app-id 3350200 \
+  --limit 10 \
+  --dry-run
+```
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。

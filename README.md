@@ -181,6 +181,48 @@ python main.py comments --input appids.txt --file data/comments.json
 | `--review-type` | `all`、`positive` 或 `negative`。 |
 | `--purchase-type` | `all`、`steam` 或 `non_steam_purchase`。 |
 
+### 回复逐条用户评论：`reply-comments`
+
+此命令读取 `comments` 生成的 JSON，根据其中的 `recommendationid` 调用 Steam Community 的开发者回复接口。
+该接口需要已登录且有开发者权限的 Steam Community Cookie；Cookie 不应写入代码或提交到 Git。
+
+准备 Cookie 文件：
+
+```text
+browserid=...; steamLoginSecure=...; sessionid=...; steamCountry=...
+```
+
+准备回复文本文件：
+
+```text
+感谢您的反馈，我们会继续优化体验。
+```
+
+先 dry-run 检查将要回复的评论：
+
+```bash
+python main.py reply-comments --comments-file data/comments_730.json --dry-run
+```
+
+确认后发送：
+
+```bash
+python main.py reply-comments --comments-file data/comments_730.json --yes
+```
+
+常用参数：
+
+| 参数 | 说明 |
+| :--- | :--- |
+| `--comments-file` | `comments` 命令生成的 JSON 文件。 |
+| `--response` | 直接传入回复文本。 |
+| `--response-file` | 回复文本文件；不指定时读取 `config.yaml`。 |
+| `--cookie-file` | Steam Community Cookie 文件；不指定时读取 `config.yaml`。 |
+| `--result-file` | 回复结果 JSON；不指定时读取 `config.yaml`。 |
+| `--limit` | 最多回复多少条；不指定或传 `0` 表示处理全部。 |
+| `--dry-run` | 只生成待回复清单，不发送请求。 |
+| `--yes` | 跳过发送前确认。 |
+
 ### 导出数据：`export`
 
 ```bash
@@ -233,6 +275,21 @@ http:
 output:
   data_dir: ./data
   checkpoint_file: .checkpoint.json
+
+comments:
+  language: schinese
+  filter: recent
+  review_type: all
+  purchase_type: all
+  per_page: 100
+  limit: 0
+  use_review_quality: true
+
+developer_replies:
+  cookie_file: ./data/steam_cookie.txt
+  response_file: ./data/developer_response.txt
+  result_file: ./data/developer_reply_results.json
+  limit: 0
 ```
 
 如果遇到大量 `429 Too Many Requests`、连接超时或失败记录明显增多，建议降低 `scraper.max_workers`，并在稍后使用 `retry` 命令补抓失败项目。

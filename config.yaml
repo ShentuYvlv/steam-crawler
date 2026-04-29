@@ -24,3 +24,9 @@ comments:
   per_page: 100           # 每页评论数量，1-100
   limit: 0                # 每个游戏最多抓取多少条，0 表示尽量抓取全部
   use_review_quality: true # 使用新的评测价值系统
+
+developer_replies:
+  cookie_file: ./data/steam_cookie.txt # Steam Community Cookie 抓包文件路径，不要提交真实 Cookie
+  response_file: ./data/developer_response.txt # 默认回复文本文件
+  result_file: ./data/developer_reply_results.json # 回复结果输出文件
+  limit: 0                # 最多回复多少条，0 表示处理输入文件里的全部评论

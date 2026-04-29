@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 import shutil
 import signal
 import sys
@@ -26,6 +27,11 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from src.config import Config
 from src.database import DatabaseManager
+from src.scrapers.comment_reply import (
+    DeveloperReplyClient,
+    load_cookie_header,
+    reply_to_reviews,
+)
 from src.scrapers.comment_scraper import CommentScraper
 from src.scrapers.game_scraper import GameScraper
 from src.scrapers.review_scraper import ReviewScraper
@@ -122,6 +128,58 @@ def _resolve_comments_options(
         "limit": limit,
         "use_review_quality": comments.use_review_quality,
     }
+
+
+def _load_comments_reviews(comments_file: str | Path) -> list[dict]:
+    """从 comments 命令生成的 JSON 中提取评测列表。"""
+    path = Path(comments_file)
+    if not path.exists():
+        raise FileNotFoundError(f"评论 JSON 文件不存在: {path}")
+
+    with open(path, "r", encoding="utf-8") as f:
+        payload = json.load(f)
+
+    reviews: list[dict] = []
+    for game in payload.get("games", []):
+        app_id = game.get("app_id")
+        for review in game.get("reviews", []):
+            item = dict(review)
+            item["app_id"] = app_id
+            reviews.append(item)
+
+    return reviews
+
+
+def _load_reply_text(config: Config, args: argparse.Namespace) -> str:
+    """读取开发者回复文本。"""
+    if args.response:
+        return args.response
+
+    response_file = Path(args.response_file or config.developer_replies.response_file)
+    if not response_file.exists():
+        raise FileNotFoundError(f"回复文本文件不存在: {response_file}")
+
+    response_text = response_file.read_text(encoding="utf-8").strip()
+    if not response_text:
+        raise ValueError(f"回复文本文件为空: {response_file}")
+    return response_text
+
+
+def _load_reply_cookie(config: Config, args: argparse.Namespace) -> str:
+    """读取 Steam Community Cookie header。"""
+    if args.cookie:
+        return args.cookie.strip()
+
+    env_cookie = os.environ.get("STEAM_COMMUNITY_COOKIE", "").strip()
+    if env_cookie:
+        return env_cookie
+
+    cookie_file = Path(args.cookie_file or config.developer_replies.cookie_file)
+    if not cookie_file.exists():
+        raise FileNotFoundError(
+            f"Cookie 文件不存在: {cookie_file}。也可以使用 STEAM_COMMUNITY_COOKIE 环境变量。"
+        )
+    return load_cookie_header(cookie_file)
 
 
 def main() -> None:
@@ -298,6 +356,69 @@ def main() -> None:
         help="每页请求数量，1-100；不指定则使用 config.yaml",
     )
 
+    # 开发者回复命令
+    reply_parser = subparsers.add_parser(
+        "reply-comments",
+        help="回复已抓取的用户评论",
+        description="读取 comments 输出的 JSON，并调用 Steam Community 开发者回复接口",
+    )
+    reply_parser.add_argument(
+        "--comments-file",
+        required=True,
+        metavar="JSON",
+        help="comments 命令生成的评论 JSON 文件",
+    )
+    reply_parser.add_argument(
+        "--response",
+        default=None,
+        help="直接指定回复文本；不指定则读取 --response-file 或 config.yaml",
+    )
+    reply_parser.add_argument(
+        "--response-file",
+        default=None,
+        metavar="FILE",
+        help="回复文本文件；不指定则使用 config.yaml",
+    )
+    reply_parser.add_argument(
+        "--cookie-file",
+        default=None,
+        metavar="FILE",
+        help="Steam Community Cookie 文件；不指定则使用 config.yaml 或环境变量",
+    )
+    reply_parser.add_argument(
+        "--cookie",
+        default=None,
+        help="直接传入 Cookie header；优先级高于文件和环境变量",
+    )
+    reply_parser.add_argument(
+        "--sessionid",
+        default=None,
+        help="可选：手动指定 sessionid；不指定则从 Cookie 中解析",
+    )
+    reply_parser.add_argument(
+        "--result-file",
+        default=None,
+        metavar="JSON",
+        help="回复结果 JSON；不指定则使用 config.yaml",
+    )
+    reply_parser.add_argument(
+        "--limit",
+        type=_parse_non_negative_int,
+        default=None,
+        metavar="N",
+        help="最多回复 N 条；不指定则使用 config.yaml，0 表示全部",
+    )
+    reply_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="只生成待回复清单，不发送请求",
+    )
+    reply_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="跳过发送前确认",
+    )
+
     # 完整流程命令
     all_parser = subparsers.add_parser(
         "all",
@@ -415,6 +536,8 @@ def main() -> None:
         run_reviews_scraper(config, args, failure_manager, ui, stop_event)
     elif args.command == "comments":
         run_comments_scraper(config, args, failure_manager, ui, stop_event)
+    elif args.command == "reply-comments":
+        run_reply_comments(config, args, ui)
     elif args.command == "all":
         run_all(config, args, failure_manager, ui, stop_event)
     elif args.command == "export":
@@ -841,6 +964,109 @@ def run_comments_scraper(
     asyncio.run(
         run_comments_scraper_async(config, args, failure_manager, ui, stop_event)
     )
+
+
+async def run_reply_comments_async(
+    config: Config,
+    args: argparse.Namespace,
+    ui: UIManager,
+) -> None:
+    """异步回复已抓取的用户评论。"""
+    try:
+        reviews = _load_comments_reviews(args.comments_file)
+        response_text = _load_reply_text(config, args)
+    except (FileNotFoundError, ValueError, json.JSONDecodeError) as e:
+        ui.print_error(str(e))
+        return
+
+    if not reviews:
+        ui.print_warning("评论 JSON 中没有可回复的评论。")
+        return
+
+    configured_limit = config.developer_replies.limit if args.limit is None else args.limit
+    limit = None if configured_limit == 0 else configured_limit
+    target_reviews = reviews[:limit] if limit is not None else reviews
+
+    result_file = Path(args.result_file or config.developer_replies.result_file)
+    result_file.parent.mkdir(parents=True, exist_ok=True)
+
+    if args.dry_run:
+        results = [
+            {
+                "recommendationid": str(review.get("recommendationid", "")),
+                "app_id": review.get("app_id"),
+                "dry_run": True,
+                "success": None,
+            }
+            for review in target_reviews
+            if review.get("recommendationid")
+        ]
+    else:
+        if not args.yes:
+            confirmed = ui.confirm(
+                f"即将向 {len(target_reviews)} 条 Steam 评论发送开发者回复，是否继续？",
+                default=False,
+            )
+            if not confirmed:
+                ui.print("操作已取消。")
+                return
+
+        try:
+            cookie_header = _load_reply_cookie(config, args)
+        except FileNotFoundError as e:
+            ui.print_error(str(e))
+            return
+
+        try:
+            client = DeveloperReplyClient(
+                cookie_header=cookie_header,
+                session_id=args.sessionid,
+                config=config,
+            )
+        except ValueError as e:
+            ui.print_error(str(e))
+            return
+
+        try:
+            results = await reply_to_reviews(
+                client=client,
+                reviews=target_reviews,
+                response_text=response_text,
+            )
+        finally:
+            await client.close()
+
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "comments_file": str(args.comments_file),
+        "dry_run": args.dry_run,
+        "requested_count": len(target_reviews),
+        "success_count": sum(1 for item in results if item.get("success") is True),
+        "failed_count": sum(1 for item in results if item.get("success") is False),
+        "results": results,
+    }
+
+    with open(result_file, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+
+    if args.dry_run:
+        ui.print_success(
+            f"已生成待回复清单：{len(results)} 条。结果已保存到: [bold]{result_file}[/bold]"
+        )
+    else:
+        ui.print_success(
+            f"回复完成：成功 {payload['success_count']} 条，失败 {payload['failed_count']} 条。"
+            f" 结果已保存到: [bold]{result_file}[/bold]"
+        )
+
+
+def run_reply_comments(
+    config: Config,
+    args: argparse.Namespace,
+    ui: UIManager,
+) -> None:
+    """运行开发者回复命令。"""
+    asyncio.run(run_reply_comments_async(config, args, ui))
 
 
 async def run_all_async(

@@ -85,6 +85,19 @@ class CommentsConfig:
 
 
 @dataclass
+class DeveloperRepliesConfig:
+    """开发者回复配置。
+
+    Cookie 内容本身不应写入配置文件，只配置本地文件路径。
+    """
+
+    cookie_file: str = "./data/steam_cookie.txt"
+    response_file: str = "./data/developer_response.txt"
+    result_file: str = "./data/developer_reply_results.json"
+    limit: int = 0
+
+
+@dataclass
 class Config:
     """全局配置。
 
@@ -98,6 +111,9 @@ class Config:
     scraper: ScraperConfig = field(default_factory=ScraperConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     comments: CommentsConfig = field(default_factory=CommentsConfig)
+    developer_replies: DeveloperRepliesConfig = field(
+        default_factory=DeveloperRepliesConfig
+    )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Config:
@@ -113,12 +129,14 @@ class Config:
         scraper_data = data.get("scraper", {})
         output_data = data.get("output", {})
         comments_data = data.get("comments", {})
+        developer_replies_data = data.get("developer_replies", {})
 
         return cls(
             http=HttpConfig(**http_data),
             scraper=ScraperConfig(**scraper_data),
             output=OutputConfig(**output_data),
             comments=CommentsConfig(**comments_data),
+            developer_replies=DeveloperRepliesConfig(**developer_replies_data),
         )
 
     @classmethod

@@ -1,0 +1,80 @@
+请求网址
+https://steamcommunity.com/userreviews/setdeveloperresponse/224227793
+请求方法
+POST
+状态代码
+200 OK
+远程地址
+127.0.0.1:7890
+引荐来源网址政策
+strict-origin-when-cross-origin
+cache-control
+no-cache
+connection
+keep-alive
+content-encoding
+gzip
+content-length
+33
+content-type
+application/json; charset=utf-8
+date
+Wed, 29 Apr 2026 05:04:33 GMT
+expires
+Mon, 26 Jul 1997 05:00:00 GMT
+server
+nginx
+vary
+Accept-Encoding
+x-frame-options
+SAMEORIGIN
+accept
+*/*
+accept-encoding
+gzip, deflate, br, zstd
+accept-language
+zh-CN,zh;q=0.9
+connection
+keep-alive
+content-length
+576
+content-type
+application/x-www-form-urlencoded; charset=UTF-8
+cookie
+recentlyVisitedAppHubs=578080; timezoneOffset=28800,0; browserid=158330884825815314; requestedPrimaryPublisher=281155; steamLoginSecure=76561198708742175%7C%7CeyAidHlwIjogIkpXVCIsICJhbGciOiAiRWREU0EiIH0.eyAiaXNzIjogInI6MDAwN18yODExOURBNV9DMjcyNiIsICJzdWIiOiAiNzY1NjExOTg3MDg3NDIxNzUiLCAiYXVkIjogWyAid2ViOmNvbW11bml0eSIgXSwgImV4cCI6IDE3Nzc0NDk5NDEsICJuYmYiOiAxNzY4NzIyNDM5LCAiaWF0IjogMTc3NzM2MjQzOSwgImp0aSI6ICIwMDE3XzI4MTE5REE1XzZGQkRCIiwgIm9hdCI6IDE3NzczNjI0MzgsICJydF9leHAiOiAxNzk1NTQwMDYwLCAicGVyIjogMCwgImlwX3N1YmplY3QiOiAiNjYuMTEyLjIxMC45MCIsICJpcF9jb25maXJtZXIiOiAiNjYuMTEyLjIxMC45MCIgfQ.UGPRy9S3MA8zjKf29Ne102U95iAAWN5e3cu_9DfchpilVoi_VN7JshPQwpDwZDUVtRb1r_ucPjh4Luf3U8VyAQ; sessionid=8680a6f0dcd90dbe3033c9c8; steamCountry=SG%7C434f7188bf53d3e70c692f0818dc85fd; app_impressions=3350200@2_100300_300_
+host
+steamcommunity.com
+origin
+https://steamcommunity.com
+referer
+https://steamcommunity.com/profiles/76561198842609684/recommended/3350200
+sec-ch-ua
+"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"
+sec-ch-ua-mobile
+?0
+sec-ch-ua-platform
+"macOS"
+sec-fetch-dest
+empty
+sec-fetch-mode
+cors
+sec-fetch-site
+same-origin
+user-agent
+Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36
+x-requested-with
+XMLHttpRequest
+Start AI assistance chats without prior context
+AI assistance chats can now be started from anywhere in DevTools and AI assistance will find required context based on the initial prompt.
+
+MCP server & CLI
+Optionally expose DevTools and automation capabilities through CLI, enabling coding agents to batch tool calls and improve token efficiency.
+
+Code generation in the Console & Sources panels
+Generate entire code blocks directly in the Console and Sources panels by typing natural language comments.
+
+
+payload:
+developer_response=%E6%84%9F%E8%B0%A2%E6%82%A8%E7%9A%84%E8%AE%A4%E5%8F%AF%E2%9D%A4%EF%B8%8F%E6%88%91%E4%BB%AC%E5%81%9A%E8%BF%99%E6%AC%BE%E4%BA%A7%E5%93%81%E7%9A%84%E5%88%9D%E8%A1%B7%EF%BC%8C%E7%A1%AE%E5%AE%9E%E5%B0%B1%E6%98%AF%E5%B8%8C%E6%9C%9B%E6%9B%B4%E5%A4%9A%E4%BA%BA%E8%83%BD%E5%AD%A6%E4%BC%9A%E5%A6%82%E4%BD%95%E5%9C%A8%E6%84%9F%E6%83%85%E4%B8%AD%E4%BF%9D%E6%8A%A4%E5%A5%BD%E8%87%AA%E5%B7%B1%E3%80%81%E5%A4%84%E7%90%86%E5%A5%BD%E6%84%9F%E6%83%85%EF%BC%8C%E6%88%91%E4%BB%AC%E4%BC%9A%E7%BB%A7%E7%BB%AD%E5%8A%AA%E5%8A%9B%E7%9A%84%EF%BC%81&sessionid=8680a6f0dcd90dbe3033c9c8
+
+

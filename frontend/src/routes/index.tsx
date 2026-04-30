@@ -16,8 +16,8 @@ function DashboardHome() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[2rem] border border-white/80 bg-white/90 p-6 shadow-xl shadow-slate-200/70">
-        <p className="text-sm font-medium text-sky-700">Steam Review Admin</p>
+      <section className="app-card p-6">
+        <p className="text-sm font-medium text-blue-700">Steam Review Admin</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">运营统计总览</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
           汇总评论处理进度、回复发送质量和近 14 天新增趋势。
@@ -40,7 +40,7 @@ function DashboardHome() {
       </section>
 
       <section className="mt-6 grid gap-4 lg:grid-cols-3">
-        <div className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60">
+        <div className="app-card p-5">
           <h2 className="text-base font-semibold text-slate-950">处理状态</h2>
           <div className="mt-4 grid gap-3">
             <MiniMetric label="待处理" value={overview?.pending_reviews ?? 0} />
@@ -50,9 +50,9 @@ function DashboardHome() {
           </div>
         </div>
 
-        <div className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60 lg:col-span-2">
+        <div className="app-card p-5 lg:col-span-2">
           <h2 className="text-base font-semibold text-slate-950">近 14 天趋势</h2>
-          <div className="mt-5 flex h-64 items-end gap-2 overflow-hidden rounded-3xl bg-slate-50 p-4">
+          <div className="mt-5 flex h-64 items-end gap-2 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
             {timeseries.map((item) => {
               const maxValue = Math.max(
                 1,
@@ -62,12 +62,12 @@ function DashboardHome() {
                 <div key={item.date} className="flex flex-1 flex-col items-center gap-2">
                   <div className="flex h-44 items-end gap-1">
                     <span
-                      className="w-2 rounded-t-full bg-sky-500"
+                      className="w-2 rounded-t-full bg-blue-600"
                       style={{ height: `${Math.max(4, (item.new_reviews / maxValue) * 176)}px` }}
                       title={`新增评论 ${item.new_reviews}`}
                     />
                     <span
-                      className="w-2 rounded-t-full bg-emerald-500"
+                      className="w-2 rounded-t-full bg-emerald-500/90"
                       style={{ height: `${Math.max(4, (item.sent_replies / maxValue) * 176)}px` }}
                       title={`发送回复 ${item.sent_replies}`}
                     />
@@ -78,8 +78,8 @@ function DashboardHome() {
             })}
           </div>
           <div className="mt-3 flex gap-4 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-sky-500" />新增评论</span>
-            <span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-emerald-500" />发送回复</span>
+            <span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-blue-600" />新增评论</span>
+            <span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-emerald-500/90" />发送回复</span>
           </div>
         </div>
       </section>
@@ -97,8 +97,10 @@ function StatCard({
   value: string | number;
 }) {
   return (
-    <article className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60">
-      <Icon className="h-5 w-5 text-sky-600" aria-hidden="true" />
+    <article className="app-card p-5 transition hover:border-blue-200 hover:bg-blue-50/20 hover:shadow-md hover:shadow-slate-200/70">
+      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-blue-50 text-blue-700 ring-1 ring-blue-100">
+        <Icon className="h-5 w-5" aria-hidden="true" />
+      </div>
       <p className="mt-4 text-sm text-slate-500">{label}</p>
       <p className="mt-2 text-3xl font-semibold text-slate-950">{value}</p>
     </article>
@@ -107,7 +109,7 @@ function StatCard({
 
 function MiniMetric({ label, value }: { label: string; value: number }) {
   return (
-    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+    <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
       <span className="text-sm text-slate-500">{label}</span>
       <span className="font-semibold text-slate-950">{value.toLocaleString()}</span>
     </div>

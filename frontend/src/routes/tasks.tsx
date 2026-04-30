@@ -67,9 +67,9 @@ function TasksPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[2rem] border border-white/80 bg-white/90 p-6 shadow-xl shadow-slate-200/70">
+      <section className="app-card p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white">
+          <div className="icon-tile">
             <Clock3 className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
@@ -80,12 +80,12 @@ function TasksPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-[1fr_1fr_1.1fr]">
+        <div className="soft-panel mt-6 grid gap-4 p-4 md:grid-cols-[1fr_1fr_1.1fr]">
           <Field label="App ID" value={appId} onChange={setAppId} />
           <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">频率</span>
+            <span className="field-label">频率</span>
             <select
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none"
+              className="form-input"
               value={interval}
               onChange={(event) => setInterval(event.target.value)}
             >
@@ -93,7 +93,7 @@ function TasksPage() {
               <option value="daily">每天</option>
             </select>
           </label>
-          <label className="flex items-center gap-2 rounded-2xl bg-white px-3 py-3 text-sm text-slate-700">
+          <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700 transition hover:border-blue-200 hover:bg-blue-50/30">
             <input
               type="checkbox"
               checked={enabled}
@@ -101,7 +101,7 @@ function TasksPage() {
             />
             启用定时同步
           </label>
-          <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-xs leading-5 text-sky-800 md:col-span-3">
+          <div className="rounded-2xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-5 text-blue-800 md:col-span-3">
             同步策略：固定使用 Steam 最新排序，从第一页开始抓取；遇到早于本地最新评论时间的数据即停止。
           </div>
         </div>
@@ -122,14 +122,14 @@ function TasksPage() {
         </div>
       </section>
 
-      <section className="mt-6 rounded-[2rem] border border-white/80 bg-white p-5 shadow-xl shadow-slate-200/70">
+      <section className="app-card mt-6 p-5">
         <h2 className="text-base font-semibold text-slate-950">最近任务</h2>
         <div className="mt-4 grid gap-3">
           {(jobsQuery.data ?? []).map((job) => (
             <TaskCard key={job.id} job={job} />
           ))}
           {!jobsQuery.isLoading && (jobsQuery.data ?? []).length === 0 ? (
-            <p className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-sm text-slate-500">
+            <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-sm text-slate-500">
               暂无任务记录。
             </p>
           ) : null}
@@ -150,9 +150,9 @@ function Field({
 }) {
   return (
     <label className="flex flex-col gap-2 text-sm">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="field-label">{label}</span>
       <input
-        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none"
+        className="form-input"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -162,7 +162,7 @@ function Field({
 
 function TaskCard({ job }: { job: SyncJob }) {
   return (
-    <article className="rounded-3xl border border-slate-100 bg-slate-50/80 p-4">
+    <article className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 transition hover:border-blue-200 hover:bg-blue-50/30">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-950">#{job.id} · {job.job_type}</p>
@@ -170,7 +170,7 @@ function TaskCard({ job }: { job: SyncJob }) {
             App {job.app_id ?? "-"} · 按最新评论时间追新
           </p>
         </div>
-        <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+        <span className="badge-blue">
           {job.status}
         </span>
       </div>

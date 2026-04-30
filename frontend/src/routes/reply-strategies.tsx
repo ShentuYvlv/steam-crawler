@@ -87,10 +87,10 @@ function ReplyStrategiesPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[1.5rem] border border-white/80 bg-white/85 p-5 shadow-xl shadow-slate-200/70 backdrop-blur sm:rounded-[2rem] sm:p-6">
+      <section className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               阶段 4 · Strategy Configuration
             </div>
@@ -101,7 +101,7 @@ function ReplyStrategiesPage() {
               配置 AI 回复规则、禁忌项、优秀案例、品牌调性和分类策略。后续生成草稿会记录当时使用的策略版本。
             </p>
           </div>
-          <div className="rounded-3xl border border-slate-100 bg-slate-50/80 p-4">
+          <div className="soft-panel p-4">
             <p className="text-xs text-slate-500">当前 Active 策略</p>
             <p className="mt-2 text-lg font-semibold text-slate-950">
               {activeStrategy?.name ?? "尚未设置"}
@@ -114,7 +114,7 @@ function ReplyStrategiesPage() {
       </section>
 
       <section className="mt-5 grid gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
-        <aside className="rounded-[1.75rem] border border-white/80 bg-white p-4 shadow-xl shadow-slate-200/70">
+        <aside className="app-card p-4">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-950">策略版本</h2>
@@ -126,7 +126,7 @@ function ReplyStrategiesPage() {
           </div>
           <div className="mt-4 space-y-2">
             {strategiesQuery.isLoading ? (
-              <p className="rounded-2xl bg-slate-50 p-4 text-sm text-slate-500">加载策略中...</p>
+              <p className="soft-panel p-4 text-sm text-slate-500">加载策略中...</p>
             ) : null}
             {strategies.map((strategy) => (
               <button
@@ -134,15 +134,15 @@ function ReplyStrategiesPage() {
                 type="button"
                 className={
                   selectedStrategyId === strategy.id
-                    ? "w-full rounded-2xl border border-sky-100 bg-sky-50 p-4 text-left shadow-sm"
-                    : "w-full rounded-2xl border border-slate-100 bg-white p-4 text-left transition hover:bg-slate-50"
+                    ? "w-full rounded-2xl border border-blue-200 bg-blue-50/80 p-4 text-left shadow-sm"
+                    : "w-full rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-blue-200 hover:bg-blue-50/30"
                 }
                 onClick={() => setSelectedStrategyId(strategy.id)}
               >
                 <div className="flex items-center justify-between gap-3">
                   <p className="font-semibold text-slate-950">{strategy.name}</p>
                   {strategy.is_active ? (
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-100">
+                    <span className="badge-green px-2.5">
                       Active
                     </span>
                   ) : null}
@@ -157,8 +157,8 @@ function ReplyStrategiesPage() {
               type="button"
               className={
                 selectedStrategyId === "new"
-                  ? "w-full rounded-2xl border border-sky-100 bg-sky-50 p-4 text-left shadow-sm"
-                  : "w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-left text-slate-500"
+                  ? "w-full rounded-2xl border border-blue-200 bg-blue-50/80 p-4 text-left shadow-sm"
+                  : "w-full rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-4 text-left text-slate-500 transition hover:border-blue-200 hover:bg-blue-50/30"
               }
               onClick={startNewStrategy}
             >
@@ -168,10 +168,10 @@ function ReplyStrategiesPage() {
           </div>
         </aside>
 
-        <section className="rounded-[1.75rem] border border-white/80 bg-white p-5 shadow-xl shadow-slate-200/70">
+        <section className="app-card p-5">
           <div className="flex flex-col gap-4 border-b border-slate-100 pb-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-500/20">
+              <div className="icon-tile">
                 <Settings2 className="h-5 w-5" aria-hidden="true" />
               </div>
               <div>
@@ -307,9 +307,9 @@ function ExamplesEditor({
   return (
     <div className="space-y-3">
       {normalizedExamples.map((example, index) => (
-        <div key={index} className="rounded-3xl border border-slate-100 bg-slate-50 p-4">
+        <div key={index} className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
-            <FileText className="h-4 w-4 text-sky-600" aria-hidden="true" />
+            <FileText className="h-4 w-4 text-blue-600" aria-hidden="true" />
             案例 {index + 1}
           </div>
           <div className="mt-3 grid gap-3 lg:grid-cols-3">

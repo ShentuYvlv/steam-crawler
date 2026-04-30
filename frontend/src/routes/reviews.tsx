@@ -153,10 +153,10 @@ function ReviewsPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[1.5rem] border border-white/80 bg-white/85 p-5 shadow-xl shadow-slate-200/70 backdrop-blur sm:rounded-[2rem] sm:p-6">
+      <section className="app-card p-5 sm:p-6">
         <div className="flex flex-col gap-5 xl:flex-row xl:items-end xl:justify-between">
           <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
               <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
               阶段 3 · Review Operations
             </div>
@@ -167,7 +167,7 @@ function ReviewsPage() {
               面向 Steam 评论运营的管理视图，集中完成筛选、扫读、详情查看和批量状态标记。
             </p>
           </div>
-          <div className="grid grid-cols-1 gap-3 rounded-3xl border border-slate-100 bg-slate-50/80 p-3 sm:grid-cols-3">
+          <div className="soft-panel grid grid-cols-1 gap-3 p-3 sm:grid-cols-3">
             <MetricCard label="评论总数" value={reviewsQuery.data?.total ?? 0} />
             <MetricCard label="当前页" value={items.length} />
             <MetricCard label="已选中" value={selectedIds.length} accent />
@@ -175,10 +175,10 @@ function ReviewsPage() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-[1.5rem] border border-white/80 bg-white/90 p-4 shadow-lg shadow-slate-200/60 backdrop-blur sm:mt-6 sm:rounded-[1.75rem] sm:p-5">
+      <section className="app-card mt-5 p-4 sm:mt-6 sm:p-5">
         <div className="flex flex-col gap-4 border-b border-slate-100 pb-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white shadow-lg shadow-sky-500/20">
+            <div className="icon-tile">
               <SlidersHorizontal className="h-5 w-5" aria-hidden="true" />
             </div>
             <div>
@@ -272,7 +272,7 @@ function ReviewsPage() {
           </FilterSelect>
           <label className="flex flex-col gap-2 text-sm sm:col-span-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">关键词搜索</span>
-            <span className="flex h-11 items-center rounded-2xl border border-slate-200 bg-slate-50 px-3 shadow-inner shadow-white transition focus-within:border-sky-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-sky-100">
+            <span className="flex h-11 items-center rounded-2xl border border-slate-200 bg-white px-3 transition hover:border-blue-200 focus-within:border-blue-300 focus-within:bg-white focus-within:ring-4 focus-within:ring-blue-100">
               <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
               <input
                 className="ml-2 w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"
@@ -289,7 +289,7 @@ function ReviewsPage() {
             {activeFilters.map((filter) => (
               <span
                 key={filter}
-                className="rounded-full border border-sky-100 bg-sky-50 px-3 py-1 text-xs font-medium text-sky-700"
+                className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700"
               >
                 {filter}
               </span>
@@ -298,13 +298,13 @@ function ReviewsPage() {
         ) : null}
       </section>
 
-      <section className="mt-5 flex flex-col gap-3 rounded-3xl border border-white/80 bg-white/82 px-4 py-4 shadow-lg shadow-slate-200/50 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+      <section className="app-card mt-5 flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
         <div>
           <p className="text-sm font-semibold text-slate-900">批量操作</p>
           <p className="mt-1 text-xs text-slate-500">
             已选择 {selectedIds.length} 条评论，可批量调整处理状态。
           </p>
-          {draftNotice ? <p className="mt-2 text-xs font-medium text-sky-700">{draftNotice}</p> : null}
+          {draftNotice ? <p className="mt-2 text-xs font-medium text-blue-700">{draftNotice}</p> : null}
         </div>
         <div className="flex w-full flex-wrap gap-2 sm:w-auto">
           <Button
@@ -339,7 +339,7 @@ function ReviewsPage() {
       </section>
 
       <section className="mt-5">
-        <div className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white shadow-xl shadow-slate-200/70">
+        <div className="app-card overflow-hidden">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-950">评论数据</h2>
@@ -360,11 +360,11 @@ function ReviewsPage() {
                 <col className="w-28" />
                 <col className="w-32" />
               </colgroup>
-              <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+              <thead className="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="w-12 px-5 py-4">
                     <input
-                      className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                       type="checkbox"
                       checked={allCurrentPageSelected}
                       onChange={toggleCurrentPage}
@@ -451,7 +451,7 @@ function ReviewsPage() {
         </div>
       </section>
 
-      <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/80 bg-white/82 px-4 py-4 shadow-lg shadow-slate-200/50 sm:justify-end sm:px-5">
+      <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-slate-200 bg-white px-4 py-4 shadow-sm shadow-slate-200/70 sm:justify-end sm:px-5">
         <Button
           type="button"
           variant="outline"
@@ -485,11 +485,11 @@ function MetricCard({ label, value, accent = false }: { label: string; value: nu
     <div
       className={
         accent
-          ? "rounded-2xl bg-sky-600 px-4 py-3 text-white"
-          : "rounded-2xl bg-white px-4 py-3 text-slate-900 shadow-sm"
+          ? "rounded-2xl border border-blue-100 bg-blue-600 px-4 py-3 text-white shadow-sm shadow-blue-100"
+          : "rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-900 shadow-sm shadow-slate-100"
       }
     >
-      <p className={accent ? "text-xs text-sky-100" : "text-xs text-slate-500"}>{label}</p>
+      <p className={accent ? "text-xs text-blue-100" : "text-xs text-slate-500"}>{label}</p>
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value.toLocaleString()}</p>
     </div>
   );
@@ -509,10 +509,10 @@ function ReviewRow({
   onOpen: () => void;
 }) {
   return (
-    <tr className={active ? "bg-sky-50/80" : "bg-white transition-colors hover:bg-slate-50"}>
+    <tr className={active ? "bg-blue-50/70" : "bg-white transition-colors hover:bg-blue-50/25"}>
       <td className="px-5 py-4">
         <input
-          className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
           type="checkbox"
           checked={selected}
           onChange={onToggle}
@@ -523,7 +523,7 @@ function ReviewRow({
       </td>
       <td className="min-w-0 px-4 py-4">
         <button type="button" className="block text-left" onClick={onOpen}>
-          <span className="line-clamp-2 font-medium leading-6 text-slate-900 hover:text-sky-700">
+          <span className="line-clamp-2 font-medium leading-6 text-slate-900 hover:text-blue-700">
             {item.review_text || "无文本"}
           </span>
         </button>
@@ -536,14 +536,14 @@ function ReviewRow({
       </td>
       <td className="px-4 py-4">
         <div className="flex items-center gap-2 font-semibold text-slate-900">
-          <ThumbsUp className="h-4 w-4 text-sky-500" aria-hidden="true" />
+          <ThumbsUp className="h-4 w-4 text-blue-500" aria-hidden="true" />
           {item.votes_up}
         </div>
         <p className="mt-1 text-xs text-slate-400">有趣 {item.votes_funny}</p>
       </td>
       <td className="px-4 py-4">
         <div className="flex items-center gap-2 font-medium text-slate-900">
-          <Clock3 className="h-4 w-4 text-cyan-500" aria-hidden="true" />
+          <Clock3 className="h-4 w-4 text-blue-500" aria-hidden="true" />
           {item.playtime_forever ?? "-"}h
         </div>
         <p className="mt-1 text-xs text-slate-400">评论时 {item.playtime_at_review ?? "-"}h</p>
@@ -574,14 +574,14 @@ function MobileReviewCard({
     <article
       className={
         active
-          ? "rounded-3xl border border-sky-200 bg-sky-50/80 p-4 shadow-sm"
-          : "rounded-3xl border border-slate-100 bg-white p-4 shadow-sm shadow-slate-100"
+          ? "rounded-2xl border border-blue-200 bg-blue-50/70 p-4 shadow-sm"
+          : "rounded-2xl border border-slate-200 bg-white p-4 shadow-sm shadow-slate-100 transition hover:border-blue-200 hover:bg-blue-50/20"
       }
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <input
-            className="h-4 w-4 rounded border-slate-300 text-sky-600 focus:ring-sky-500"
+            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
             type="checkbox"
             checked={selected}
             onChange={onToggle}
@@ -610,7 +610,7 @@ function MobileReviewCard({
 
 function MiniStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl bg-slate-50 px-3 py-2">
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2">
       <p className="text-[11px] text-slate-400">{label}</p>
       <p className="mt-1 truncate font-semibold text-slate-800">{value}</p>
     </div>
@@ -633,7 +633,7 @@ function ExpandedReviewDetailRow({
   onGenerate: () => void;
 }) {
   return (
-    <tr className="bg-slate-50/80">
+    <tr className="bg-slate-50/70">
       <td colSpan={7} className="px-5 py-5">
         <InlineReviewDetail
           review={review}
@@ -692,7 +692,7 @@ function InlineReviewDetail({
 }) {
   if (loading) {
     return (
-      <div className="rounded-3xl border border-slate-100 bg-white p-5 text-sm text-slate-500 shadow-sm">
+      <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-500 shadow-sm">
         详情加载中...
       </div>
     );
@@ -700,14 +700,14 @@ function InlineReviewDetail({
 
   if (!review) {
     return (
-      <div className="rounded-3xl border border-rose-100 bg-rose-50 p-5 text-sm text-rose-600">
+      <div className="rounded-2xl border border-rose-100 bg-rose-50 p-5 text-sm text-rose-600">
         详情加载失败。
       </div>
     );
   }
 
   return (
-    <div className="rounded-[1.5rem] border border-sky-100 bg-white p-5 shadow-sm shadow-sky-100/60">
+    <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm shadow-blue-50">
       <ReviewDetailPanel
         review={review}
         busy={busy}
@@ -742,9 +742,9 @@ function ReviewDetailPanel({
         <StatusBadge status={review.processing_status} />
       </div>
 
-      <div className="mt-5 rounded-3xl border border-slate-100 bg-slate-50 p-4">
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-sky-600 shadow-sm">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-blue-600 shadow-sm">
             <UserRound className="h-5 w-5" aria-hidden="true" />
           </div>
           <div className="min-w-0">
@@ -769,7 +769,7 @@ function ReviewDetailPanel({
       </dl>
 
       {review.developer_response ? (
-        <div className="mt-5 rounded-3xl border border-emerald-100 bg-emerald-50 p-4">
+        <div className="mt-5 rounded-2xl border border-emerald-100 bg-emerald-50/80 p-4">
           <p className="text-xs font-semibold text-emerald-700">已有开发者回复</p>
           <p className="mt-2 text-sm leading-6 text-emerald-900">{review.developer_response}</p>
         </div>
@@ -841,7 +841,7 @@ function ReplyDraftAuditPanel({
   const canSend = draftText.trim().length > 0 && !sendMutation.isPending;
 
   return (
-    <section className="mt-5 rounded-3xl border border-sky-100 bg-sky-50/50 p-4">
+    <section className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-950">AI 回复审核</p>
@@ -879,7 +879,7 @@ function ReplyDraftAuditPanel({
       ) : null}
 
       <textarea
-        className="mt-4 min-h-36 w-full rounded-3xl border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+        className="form-textarea mt-4 min-h-36 w-full p-4"
         value={draftText}
         onChange={(event) => setDraftText(event.target.value)}
         placeholder="暂无草稿，点击“重新生成”生成 AI 回复草稿。"
@@ -925,7 +925,7 @@ function EmptyTableState() {
   return (
     <tr>
       <td className="px-6 py-16" colSpan={7}>
-        <div className="mx-auto flex max-w-md flex-col items-center rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+        <div className="mx-auto flex max-w-md flex-col items-center rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-8 text-center">
           <Inbox className="h-10 w-10 text-slate-400" aria-hidden="true" />
           <h3 className="mt-4 text-base font-semibold text-slate-900">暂无匹配评论</h3>
           <p className="mt-2 text-sm leading-6 text-slate-500">
@@ -971,13 +971,13 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-slate-100 text-slate-600 ring-slate-200"
       : status === "on_hold"
         ? "bg-amber-50 text-amber-700 ring-amber-100"
-        : "bg-sky-50 text-sky-700 ring-sky-100";
+        : "bg-blue-50 text-blue-700 ring-blue-100";
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${className}`}>{label}</span>;
 }
 
 function DetailItem({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+    <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm shadow-slate-100">
       <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="mt-1 break-all font-semibold text-slate-950">{value}</dd>
     </div>
@@ -997,7 +997,7 @@ function FilterInput({
     <label className="flex flex-col gap-2 text-sm">
       <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
       <input
-        className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+        className="form-input"
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
       />
@@ -1020,7 +1020,7 @@ function FilterSelect({
     <label className="flex flex-col gap-2 text-sm">
       <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
       <select
-        className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
+        className="form-input"
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value)}
       >

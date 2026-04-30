@@ -22,9 +22,9 @@ function ReplyRecordsPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[2rem] border border-white/80 bg-white/90 p-6 shadow-xl shadow-slate-200/70">
+      <section className="app-card p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white">
+          <div className="icon-tile">
             <Send className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
@@ -48,7 +48,7 @@ function ReplyRecordsPage() {
           />
         ))}
         {!recordsQuery.isLoading && (recordsQuery.data ?? []).length === 0 ? (
-          <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
             暂无已发送回复记录。
           </div>
         ) : null}
@@ -67,7 +67,7 @@ function ReplyRecordCard({
   onDeleteRequest: () => void;
 }) {
   return (
-    <article className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60">
+    <article className="app-card p-5 transition hover:border-blue-200 hover:shadow-md hover:shadow-slate-200/70">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <p className="text-sm font-semibold text-slate-950">
@@ -85,12 +85,12 @@ function ReplyRecordCard({
         </Button>
       </div>
       <div className="mt-4 grid gap-3 lg:grid-cols-2">
-        <div className="rounded-3xl bg-slate-50 p-4">
+        <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
           <p className="text-xs font-semibold text-slate-500">原评论</p>
           <p className="mt-2 text-sm leading-7 text-slate-700">{record.review_text || "-"}</p>
         </div>
-        <div className="rounded-3xl bg-sky-50 p-4">
-          <p className="text-xs font-semibold text-sky-700">开发者回复</p>
+        <div className="rounded-2xl border border-blue-100 bg-blue-50/70 p-4">
+          <p className="text-xs font-semibold text-blue-700">开发者回复</p>
           <p className="mt-2 text-sm leading-7 text-slate-800">{record.content}</p>
         </div>
       </div>

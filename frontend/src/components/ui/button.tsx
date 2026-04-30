@@ -5,16 +5,16 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex h-10 items-center justify-center gap-2 whitespace-nowrap rounded-xl px-4 text-sm font-semibold transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-sky-600 text-white shadow-sm shadow-sky-600/20 hover:bg-sky-500",
+        default: "bg-blue-600 text-white shadow-sm shadow-blue-100 hover:bg-blue-700",
         outline:
-          "border border-slate-200 bg-white text-slate-700 shadow-sm hover:border-sky-200 hover:bg-sky-50 hover:text-sky-700",
+          "border border-slate-200 bg-white text-slate-700 shadow-sm shadow-slate-100 hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700",
         secondary:
-          "border border-sky-100 bg-sky-50 text-sky-700 shadow-sm hover:border-sky-200 hover:bg-sky-100",
-        ghost: "text-slate-600 hover:bg-slate-100 hover:text-slate-950",
+          "border border-blue-100 bg-blue-50 text-blue-700 shadow-sm shadow-blue-50 hover:border-blue-200 hover:bg-blue-100",
+        ghost: "text-slate-600 hover:bg-blue-50 hover:text-blue-700",
         danger:
           "border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300 hover:bg-rose-100"
       }

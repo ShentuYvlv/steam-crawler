@@ -47,9 +47,9 @@ function UsersPage() {
 
   return (
     <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[2rem] border border-white/80 bg-white/90 p-6 shadow-xl shadow-slate-200/70">
+      <section className="app-card p-6">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-sky-600 text-white">
+          <div className="icon-tile">
             <UserPlus className="h-5 w-5" aria-hidden="true" />
           </div>
           <div>
@@ -58,14 +58,14 @@ function UsersPage() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-5">
+        <div className="soft-panel mt-6 grid gap-3 p-4 md:grid-cols-5">
           <Input label="用户名" value={form.username} onChange={(value) => setForm({ ...form, username: value })} />
           <Input label="密码" type="password" value={form.password} onChange={(value) => setForm({ ...form, password: value })} />
           <Input label="显示名" value={form.display_name} onChange={(value) => setForm({ ...form, display_name: value })} />
           <label className="flex flex-col gap-2 text-sm">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">角色</span>
+            <span className="field-label">角色</span>
             <select
-              className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none"
+              className="form-input"
               value={form.role}
               onChange={(event) => setForm({ ...form, role: event.target.value })}
             >
@@ -116,14 +116,14 @@ function UserCard({
   onRole: (role: string) => void;
 }) {
   return (
-    <article className="flex flex-col gap-4 rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60 md:flex-row md:items-center md:justify-between">
+    <article className="app-card flex flex-col gap-4 p-5 transition hover:border-blue-200 hover:bg-blue-50/20 hover:shadow-md hover:shadow-slate-200/70 md:flex-row md:items-center md:justify-between">
       <div>
         <p className="font-semibold text-slate-950">{user.display_name ?? user.username}</p>
         <p className="mt-1 text-sm text-slate-500">{user.username} · {user.role} · {user.is_active ? "启用" : "停用"}</p>
       </div>
       <div className="flex flex-wrap gap-2">
         <select
-          className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+          className="form-input h-10 rounded-xl"
           value={user.role}
           disabled={busy}
           onChange={(event) => onRole(event.target.value)}
@@ -153,9 +153,9 @@ function Input({
 }) {
   return (
     <label className="flex flex-col gap-2 text-sm">
-      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="field-label">{label}</span>
       <input
-        className="h-11 rounded-2xl border border-slate-200 bg-white px-3 text-sm outline-none"
+        className="form-input"
         type={type}
         value={value}
         onChange={(event) => onChange(event.target.value)}

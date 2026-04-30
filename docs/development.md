@@ -8,7 +8,7 @@
 
 - `backend/`：FastAPI + SQLAlchemy 2.x async + Alembic 后端。
 - `frontend/`：React + Vite + TypeScript 前端。
-- `docker-compose.yml`：PostgreSQL、Redis、后端、前端本地联调环境。
+- `docker-compose.yml`：后端、前端本地联调环境；PostgreSQL 和 Redis 使用宿主机服务。
 - `docs/plans/2026-04-29-steam-review-automation-execution-plan.md`：完整分阶段执行计划。
 
 ## 本地启动
@@ -25,13 +25,15 @@
    - `ALIYUN_API_KEY`：阿里云模型 API Key，接入 AI 草稿阶段才必需。
    - `STEAM_COOKIE_FILE`：开发者回复阶段需要，默认读取 `data/steam_cookie.txt`。
 
-3. 启动基础服务：
+3. 确保宿主机 PostgreSQL 和 Redis 已启动，且 `.env` 中的 `DATABASE_URL`、`REDIS_URL` 可连接。
+
+4. 启动前后端服务：
 
    ```bash
    docker compose up --build
    ```
 
-4. 健康检查：
+5. 健康检查：
 
    ```bash
    curl http://localhost:8000/api/health

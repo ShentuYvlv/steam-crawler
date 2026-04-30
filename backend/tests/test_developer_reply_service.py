@@ -6,8 +6,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import get_session
+from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.models import Base, DeveloperReply, ReplyDraft, SteamGame, SteamReview
+from app.models import Base, DeveloperReply, ReplyDraft, SteamGame, SteamReview, User
 from app.services.developer_replies import DeveloperReplyError, DeveloperReplyService
 
 
@@ -78,8 +79,16 @@ async def test_reply_records_delete_request_route() -> None:
             status="sent",
         )
         seed_session.add(record)
+        admin = User(
+            username="admin",
+            password_hash=hash_password("password123"),
+            role="admin",
+            is_active=True,
+        )
+        seed_session.add(admin)
         await seed_session.commit()
         record_id = record.id
+        token = create_access_token(admin)
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as session:
@@ -88,9 +97,11 @@ async def test_reply_records_delete_request_route() -> None:
     app.dependency_overrides[get_session] = override_session
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = {"Authorization": f"Bearer {token}"}
             list_response = await client.get("/api/reply-records")
             delete_response = await client.post(
                 f"/api/reply-records/{record_id}/delete-request",
+                headers=headers,
                 json={"confirmed": True, "reason": "测试删除请求"},
             )
     finally:

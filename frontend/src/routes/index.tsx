@@ -1,62 +1,116 @@
-import { Link, createRoute } from "@tanstack/react-router";
-import { BarChart3, Bot, CheckCircle2, RefreshCcw } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { createRoute } from "@tanstack/react-router";
+import { BarChart3, CheckCircle2, MessageSquareReply, ThumbsUp } from "lucide-react";
 
-import { Button } from "@/components/ui/button";
+import { fetchStatsOverview, fetchStatsTimeseries } from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
-const workflowItems = [
-  {
-    icon: RefreshCcw,
-    title: "评论同步",
-    description: "导入存量 CSV，并定时同步 Steam 新增评论。"
-  },
-  {
-    icon: Bot,
-    title: "AI 草稿",
-    description: "基于运营策略和评论内容生成可审核的回复草稿。"
-  },
-  {
-    icon: CheckCircle2,
-    title: "人工审核",
-    description: "运营确认后再发送，保留修改和重试记录。"
-  },
-  {
-    icon: BarChart3,
-    title: "运营统计",
-    description: "追踪待处理、已回复、好评率和发送成功率。"
-  }
-];
-
 function DashboardHome() {
-  return (
-    <main>
-      <section className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-6 py-8">
-        <header className="flex flex-col gap-4 border-b border-zinc-200 pb-6 md:flex-row md:items-end md:justify-between">
-          <div>
-            <p className="text-sm font-medium text-zinc-500">Steam Review Admin</p>
-            <h1 className="mt-2 text-3xl font-semibold tracking-normal text-zinc-950">
-              Steam 评论 AI 回复后台
-            </h1>
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-zinc-600">
-              第一阶段工程基线已建立，后续会逐步接入评论入库、筛选、AI 生成、审核发送和统计。
-            </p>
-          </div>
-          <Button asChild type="button">
-            <Link to="/reviews">进入评论列表</Link>
-          </Button>
-        </header>
+  const overviewQuery = useQuery({ queryKey: ["stats-overview"], queryFn: fetchStatsOverview });
+  const timeseriesQuery = useQuery({
+    queryKey: ["stats-timeseries", 14],
+    queryFn: () => fetchStatsTimeseries(14)
+  });
+  const overview = overviewQuery.data;
+  const timeseries = timeseriesQuery.data?.items ?? [];
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          {workflowItems.map((item) => (
-            <article key={item.title} className="border border-zinc-200 bg-white p-5">
-              <item.icon className="h-5 w-5 text-zinc-700" aria-hidden="true" />
-              <h2 className="mt-4 text-base font-semibold text-zinc-950">{item.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-zinc-600">{item.description}</p>
-            </article>
-          ))}
-        </section>
+  return (
+    <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
+      <section className="rounded-[2rem] border border-white/80 bg-white/90 p-6 shadow-xl shadow-slate-200/70">
+        <p className="text-sm font-medium text-sky-700">Steam Review Admin</p>
+        <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">运营统计总览</h1>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
+          汇总评论处理进度、回复发送质量和近 14 天新增趋势。
+        </p>
+      </section>
+
+      <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <StatCard icon={BarChart3} label="评论总数" value={overview?.total_reviews ?? 0} />
+        <StatCard
+          icon={ThumbsUp}
+          label="当前好评率"
+          value={`${Math.round((overview?.positive_rate ?? 0) * 100)}%`}
+        />
+        <StatCard icon={MessageSquareReply} label="已回复" value={overview?.replied_reviews ?? 0} />
+        <StatCard
+          icon={CheckCircle2}
+          label="回复成功率"
+          value={`${Math.round((overview?.reply_success_rate ?? 0) * 100)}%`}
+        />
+      </section>
+
+      <section className="mt-6 grid gap-4 lg:grid-cols-3">
+        <div className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60">
+          <h2 className="text-base font-semibold text-slate-950">处理状态</h2>
+          <div className="mt-4 grid gap-3">
+            <MiniMetric label="待处理" value={overview?.pending_reviews ?? 0} />
+            <MiniMetric label="已忽略" value={overview?.ignored_reviews ?? 0} />
+            <MiniMetric label="好评" value={overview?.positive_reviews ?? 0} />
+            <MiniMetric label="差评" value={overview?.negative_reviews ?? 0} />
+          </div>
+        </div>
+
+        <div className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60 lg:col-span-2">
+          <h2 className="text-base font-semibold text-slate-950">近 14 天趋势</h2>
+          <div className="mt-5 flex h-64 items-end gap-2 overflow-hidden rounded-3xl bg-slate-50 p-4">
+            {timeseries.map((item) => {
+              const maxValue = Math.max(
+                1,
+                ...timeseries.map((row) => Math.max(row.new_reviews, row.sent_replies))
+              );
+              return (
+                <div key={item.date} className="flex flex-1 flex-col items-center gap-2">
+                  <div className="flex h-44 items-end gap-1">
+                    <span
+                      className="w-2 rounded-t-full bg-sky-500"
+                      style={{ height: `${Math.max(4, (item.new_reviews / maxValue) * 176)}px` }}
+                      title={`新增评论 ${item.new_reviews}`}
+                    />
+                    <span
+                      className="w-2 rounded-t-full bg-emerald-500"
+                      style={{ height: `${Math.max(4, (item.sent_replies / maxValue) * 176)}px` }}
+                      title={`发送回复 ${item.sent_replies}`}
+                    />
+                  </div>
+                  <span className="text-[10px] text-slate-400">{item.date.slice(5)}</span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="mt-3 flex gap-4 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-sky-500" />新增评论</span>
+            <span className="inline-flex items-center gap-2"><i className="h-2 w-2 rounded-full bg-emerald-500" />发送回复</span>
+          </div>
+        </div>
       </section>
     </main>
+  );
+}
+
+function StatCard({
+  icon: Icon,
+  label,
+  value
+}: {
+  icon: typeof BarChart3;
+  label: string;
+  value: string | number;
+}) {
+  return (
+    <article className="rounded-[2rem] border border-white/80 bg-white p-5 shadow-lg shadow-slate-200/60">
+      <Icon className="h-5 w-5 text-sky-600" aria-hidden="true" />
+      <p className="mt-4 text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-3xl font-semibold text-slate-950">{value}</p>
+    </article>
+  );
+}
+
+function MiniMetric({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+      <span className="text-sm text-slate-500">{label}</span>
+      <span className="font-semibold text-slate-950">{value.toLocaleString()}</span>
+    </div>
   );
 }
 

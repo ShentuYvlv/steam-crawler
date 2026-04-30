@@ -4,8 +4,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import get_session
+from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.models import Base, SyncJob
+from app.models import Base, SyncJob, User
 
 
 async def test_task_schedule_and_list_routes() -> None:
@@ -26,7 +27,15 @@ async def test_task_schedule_and_list_routes() -> None:
                 skipped_count=3,
             )
         )
+        admin = User(
+            username="admin",
+            password_hash=hash_password("password123"),
+            role="admin",
+            is_active=True,
+        )
+        seed_session.add(admin)
         await seed_session.commit()
+        token = create_access_token(admin)
 
     async def override_session() -> AsyncGenerator[AsyncSession, None]:
         async with session_factory() as session:
@@ -35,9 +44,11 @@ async def test_task_schedule_and_list_routes() -> None:
     app.dependency_overrides[get_session] = override_session
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = {"Authorization": f"Bearer {token}"}
             list_response = await client.get("/api/tasks")
             schedule_response = await client.patch(
                 "/api/tasks/schedule",
+                headers=headers,
                 json={
                     "is_enabled": True,
                     "app_id": 3350200,

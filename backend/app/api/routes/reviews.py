@@ -6,6 +6,7 @@ from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_session
+from app.core.security import RequireOperator
 from app.models import ReplyDraft, SteamReview, SyncJob
 from app.schemas import (
     BulkGenerateReplyRequest,
@@ -208,6 +209,7 @@ async def send_reply(
     review_id: int,
     request: SendReplyRequest,
     session: SessionDependency,
+    current_user: RequireOperator,
 ) -> SendReplyResponse:
     service = DeveloperReplyService(session)
     try:
@@ -216,6 +218,7 @@ async def send_reply(
             confirmed=request.confirmed,
             draft_id=request.draft_id,
             content=request.content,
+            sent_by_user_id=current_user.id,
         )
     except DeveloperReplyError as exc:
         status_code = 404 if str(exc) in {"Review not found", "Reply draft not found"} else 400
@@ -232,10 +235,11 @@ async def send_reply(
 async def bulk_send_reply(
     request: BulkSendReplyRequest,
     background_tasks: BackgroundTasks,
+    current_user: RequireOperator,
 ) -> BulkSendReplyResponse:
     if not request.confirmed:
         raise HTTPException(status_code=400, detail="Bulk send requires confirmation")
-    background_tasks.add_task(_send_replies_in_background, request.review_ids)
+    background_tasks.add_task(_send_replies_in_background, request.review_ids, current_user.id)
     return BulkSendReplyResponse(
         accepted_count=len(request.review_ids),
         review_ids=request.review_ids,
@@ -299,12 +303,16 @@ async def _generate_reply_drafts_in_background(review_ids: list[int]) -> None:
                 continue
 
 
-async def _send_replies_in_background(review_ids: list[int]) -> None:
+async def _send_replies_in_background(review_ids: list[int], sent_by_user_id: int | None) -> None:
     async with AsyncSessionLocal() as session:
         service = DeveloperReplyService(session)
         for review_id in review_ids:
             try:
-                await service.send_reply(review_id, confirmed=True)
+                await service.send_reply(
+                    review_id,
+                    confirmed=True,
+                    sent_by_user_id=sent_by_user_id,
+                )
             except DeveloperReplyError:
                 continue
 

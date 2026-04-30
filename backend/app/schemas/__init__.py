@@ -1,3 +1,10 @@
+from app.schemas.auth import (
+    LoginRequest,
+    LoginResponse,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
 from app.schemas.reply_drafts import (
     BulkGenerateReplyRequest,
     BulkGenerateReplyResponse,
@@ -34,6 +41,7 @@ from app.schemas.reviews import (
     ReviewStatusUpdateRequest,
     ReviewStatusUpdateResponse,
 )
+from app.schemas.stats import StatsOverviewResponse, StatsTimeseriesItem, StatsTimeseriesResponse
 from app.schemas.tasks import TaskScheduleResponse, TaskScheduleUpdate
 
 __all__ = [
@@ -44,6 +52,8 @@ __all__ = [
     "BulkSendReplyResponse",
     "DeleteRequestCreate",
     "GenerateReplyResponse",
+    "LoginRequest",
+    "LoginResponse",
     "ReviewDetailResponse",
     "ReplyDraftResponse",
     "ReplyDraftUpdate",
@@ -61,8 +71,14 @@ __all__ = [
     "ReplyStrategyUpdate",
     "SendReplyRequest",
     "SendReplyResponse",
+    "StatsOverviewResponse",
+    "StatsTimeseriesItem",
+    "StatsTimeseriesResponse",
     "SyncJobDetailResponse",
     "SyncJobListItem",
     "TaskScheduleResponse",
     "TaskScheduleUpdate",
+    "UserCreate",
+    "UserResponse",
+    "UserUpdate",
 ]

@@ -1,4 +1,33 @@
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "/api";
+const authTokenKey = "steam_admin_access_token";
+
+export function getAccessToken() {
+  return window.localStorage.getItem(authTokenKey);
+}
+
+export function setAccessToken(token: string) {
+  window.localStorage.setItem(authTokenKey, token);
+}
+
+export function clearAccessToken() {
+  window.localStorage.removeItem(authTokenKey);
+}
+
+export type User = {
+  id: number;
+  username: string;
+  display_name: string | null;
+  role: "admin" | "operator" | "viewer";
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user: User;
+};
 
 export type ReviewListItem = {
   id: number;
@@ -165,6 +194,78 @@ export type TaskSchedule = {
   updated_at: string;
 };
 
+export type StatsOverview = {
+  total_reviews: number;
+  positive_reviews: number;
+  negative_reviews: number;
+  replied_reviews: number;
+  pending_reviews: number;
+  ignored_reviews: number;
+  positive_rate: number;
+  reply_success_rate: number;
+};
+
+export type StatsTimeseriesItem = {
+  date: string;
+  new_reviews: number;
+  sent_replies: number;
+};
+
+export type StatsTimeseries = {
+  items: StatsTimeseriesItem[];
+};
+
+export async function login(payload: { username: string; password: string }): Promise<LoginResponse> {
+  return apiRequest<LoginResponse>("/auth/login", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function fetchMe(): Promise<User> {
+  return apiGet<User>("/auth/me");
+}
+
+export async function fetchUsers(): Promise<User[]> {
+  return apiGet<User[]>("/users");
+}
+
+export async function createUser(payload: {
+  username: string;
+  password: string;
+  display_name?: string | null;
+  role: string;
+  is_active: boolean;
+}): Promise<User> {
+  return apiRequest<User>("/users", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateUser(
+  userId: number,
+  payload: {
+    password?: string;
+    display_name?: string | null;
+    role?: string;
+    is_active?: boolean;
+  }
+): Promise<User> {
+  return apiRequest<User>(`/users/${userId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function fetchStatsOverview(): Promise<StatsOverview> {
+  return apiGet<StatsOverview>("/stats/overview");
+}
+
+export async function fetchStatsTimeseries(days = 14): Promise<StatsTimeseries> {
+  return apiGet<StatsTimeseries>(`/stats/timeseries?days=${days}`);
+}
+
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
   return apiGet<ReviewListResponse>(`/reviews${toQueryString(query)}`);
 }
@@ -330,15 +431,20 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
+  const token = getAccessToken();
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init.headers
     }
   });
 
   if (!response.ok) {
+    if (response.status === 401) {
+      clearAccessToken();
+    }
     const message = await response.text();
     throw new Error(message || `HTTP ${response.status}`);
   }

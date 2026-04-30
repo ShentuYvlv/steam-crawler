@@ -5,6 +5,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_session
+from app.core.security import RequireOperator
 from app.models import SyncJob, TaskSchedule
 from app.schemas import (
     ReviewSyncRequest,
@@ -34,6 +35,7 @@ async def enqueue_reviews_sync(
     request: ReviewSyncRequest,
     background_tasks: BackgroundTasks,
     session: SessionDependency,
+    current_user: RequireOperator,
 ) -> SyncJob:
     sync_job = SyncJob(
         app_id=request.app_id,
@@ -53,6 +55,7 @@ async def enqueue_reviews_sync(
 async def update_reviews_sync_schedule(
     request: TaskScheduleUpdate,
     session: SessionDependency,
+    current_user: RequireOperator,
 ) -> TaskSchedule:
     result = await session.execute(
         select(TaskSchedule).where(TaskSchedule.task_type == "steam_review_sync")

@@ -48,6 +48,7 @@ class DeveloperReplyService:
         confirmed: bool,
         draft_id: int | None = None,
         content: str | None = None,
+        sent_by_user_id: int | None = None,
     ) -> DeveloperReply:
         if not confirmed:
             raise DeveloperReplyError("Sending a Steam developer reply requires confirmation")
@@ -67,6 +68,7 @@ class DeveloperReplyService:
             recommendation_id=review.recommendation_id,
             content=reply_content,
             status="pending",
+            sent_by_user_id=sent_by_user_id,
         )
         self.session.add(record)
         await self.session.flush()
@@ -94,6 +96,7 @@ class DeveloperReplyService:
             self.session.add(
                 OperationLog(
                     action="developer_reply_sent",
+                    user_id=sent_by_user_id,
                     target_type="developer_reply",
                     target_id=str(record.id),
                     details=json.dumps(

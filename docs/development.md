@@ -39,6 +39,19 @@
    curl http://localhost:8000/api/health
    ```
 
+6. 首次创建管理员账号：
+
+   ```bash
+   cd backend
+   python -m app.cli.create_user \
+     --username admin \
+     --password "change-this-password" \
+     --display-name "管理员" \
+     --role admin
+   ```
+
+   系统不开放注册和忘记密码，后续用户由管理员在后台创建或停用。
+
 ## 数据约定
 
 - 首次导入 `data/情感反诈模拟器-steam评论 - 全部评论.csv`，统一标记为存量数据。
@@ -116,6 +129,17 @@ http://localhost:5173/reviews
 curl "http://localhost:8000/api/reviews?app_id=3350200&voted_up=false&keyword=差评&sort_by=votes_up&sort_order=desc&page=1&page_size=50"
 curl http://localhost:8000/api/reviews/1
 ```
+
+## 统计面板
+
+首页 `/` 会读取真实数据库统计：
+
+```bash
+curl http://localhost:8000/api/stats/overview
+curl "http://localhost:8000/api/stats/timeseries?days=14"
+```
+
+统计项包括评论总数、好评/差评数、已回复数、待处理数、忽略数、好评率、回复发送成功率，以及按日期聚合的新增评论和发送回复数量。
 
 状态标记接口：
 
@@ -229,9 +253,37 @@ curl -X PATCH http://localhost:8000/api/tasks/schedule \
 http://localhost:5173/reply-records
 ```
 
+## 登录与 RBAC
+
+当前采用独立账号密码登录：
+
+- `admin`：可访问全部菜单，额外显示“用户管理”，可创建、停用用户和调整角色。
+- `operator`：可进行评论处理、AI 草稿审核、发送回复、任务同步和删除请求记录。
+- `viewer`：预留只读角色，不显示管理员入口。
+
+认证接口：
+
+```bash
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"change-this-password"}'
+
+curl http://localhost:8000/api/auth/me \
+  -H "Authorization: Bearer <TOKEN>"
+```
+
+管理员用户管理接口：
+
+```bash
+curl -X POST http://localhost:8000/api/users \
+  -H "Authorization: Bearer <ADMIN_TOKEN>" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"operator1","password":"change-this-password","role":"operator","is_active":true}'
+```
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。
 - Steam Cookie 仅保存在本地环境或本地文件，不提交到 Git。
 - 当前阶段暂不接入飞书数据源。
-- 登录账号体系待留言板后台确认后再实现。
+- 登录采用本系统独立账号体系，账号由管理员维护。

@@ -7,6 +7,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
+from app.core.security import RequireOperator
 from app.models import DeveloperReply, OperationLog, SteamReview
 from app.schemas import DeleteRequestCreate, ReplyRecordListItem, ReplyRecordResponse
 
@@ -50,6 +51,7 @@ async def create_delete_request(
     record_id: int,
     request: DeleteRequestCreate,
     session: SessionDependency,
+    current_user: RequireOperator,
 ) -> DeveloperReply:
     if not request.confirmed:
         raise HTTPException(status_code=400, detail="Delete request requires confirmation")
@@ -64,6 +66,7 @@ async def create_delete_request(
     session.add(
         OperationLog(
             action="developer_reply_delete_requested",
+            user_id=current_user.id,
             target_type="developer_reply",
             target_id=str(record.id),
             details=request.reason,

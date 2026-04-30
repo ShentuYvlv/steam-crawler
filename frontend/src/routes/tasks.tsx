@@ -18,7 +18,7 @@ function TasksPage() {
   const [appId, setAppId] = useState("3350200");
   const [enabled, setEnabled] = useState(false);
   const [interval, setInterval] = useState("daily");
-  const jobsQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
+  const jobsQuery = useQuery({ queryKey: ["tasks"], queryFn: () => fetchTasks() });
   const scheduleQuery = useQuery({ queryKey: ["tasks-schedule"], queryFn: fetchTaskSchedule });
 
   useEffect(() => {

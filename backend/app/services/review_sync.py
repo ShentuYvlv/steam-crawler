@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.importers import steam_api_review_to_values
 from app.models import SteamReview, SyncJob
 from app.repositories import SteamReviewRepository
+from app.services.task_logs import add_task_log
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -85,6 +86,12 @@ class SteamReviewSyncService:
             )
             self.session.add(sync_job)
         await self.session.flush()
+        await add_task_log(
+            self.session,
+            sync_job.id,
+            "Steam 评论同步开始",
+            details={"app_id": options.app_id, "filter": options.filter},
+        )
 
         inserted = 0
         updated = 0
@@ -96,6 +103,18 @@ class SteamReviewSyncService:
         since_timestamp = datetime_to_epoch_seconds(
             latest_review_created_at,
             source_type=latest_review.source_type if latest_review else None,
+        )
+        await add_task_log(
+            self.session,
+            sync_job.id,
+            "读取本地最新评论时间",
+            details={
+                "latest_review_id": latest_review.id if latest_review else None,
+                "latest_review_created_at": (
+                    latest_review_created_at.isoformat() if latest_review_created_at else None
+                ),
+                "since_timestamp": since_timestamp,
+            },
         )
 
         try:
@@ -128,6 +147,12 @@ class SteamReviewSyncService:
             sync_job.updated_count = updated
             sync_job.skipped_count = skipped
             sync_job.finished_at = datetime.now(tz=CHINA_TZ)
+            await add_task_log(
+                self.session,
+                sync_job.id,
+                "Steam 评论同步完成",
+                details={"inserted": inserted, "updated": updated, "skipped": skipped},
+            )
             await self.session.commit()
         except Exception as exc:
             sync_job.status = "failed"
@@ -136,6 +161,18 @@ class SteamReviewSyncService:
             sync_job.skipped_count = skipped
             sync_job.error_message = str(exc)
             sync_job.finished_at = datetime.now(tz=CHINA_TZ)
+            await add_task_log(
+                self.session,
+                sync_job.id,
+                "Steam 评论同步失败",
+                level="error",
+                details={
+                    "error": str(exc),
+                    "inserted": inserted,
+                    "updated": updated,
+                    "skipped": skipped,
+                },
+            )
             await self.session.commit()
             raise
         finally:

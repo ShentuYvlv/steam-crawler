@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Annotated
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import Select, asc, desc, func, or_, select, update
@@ -30,9 +31,11 @@ from app.schemas import (
 from app.services.developer_replies import DeveloperReplyError, DeveloperReplyService
 from app.services.reply_generation import ReplyGenerationError, ReplyGenerationService
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
+from app.services.task_logs import add_task_log
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
+CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
 
 @router.get("", response_model=ReviewListResponse)
@@ -169,11 +172,21 @@ async def bulk_update_review_status(
 async def bulk_generate_reply(
     request: BulkGenerateReplyRequest,
     background_tasks: BackgroundTasks,
+    session: SessionDependency,
+    current_user: RequireOperator,
 ) -> BulkGenerateReplyResponse:
-    background_tasks.add_task(_generate_reply_drafts_in_background, request.review_ids)
+    task = await _create_background_job(
+        session,
+        job_type="bulk_reply_generation",
+        source_type="aliyun_api",
+        requested_limit=len(request.review_ids),
+        details={"review_ids": request.review_ids, "created_by_user_id": current_user.id},
+    )
+    background_tasks.add_task(_generate_reply_drafts_in_background, task.id, request.review_ids)
     return BulkGenerateReplyResponse(
         accepted_count=len(request.review_ids),
         review_ids=request.review_ids,
+        task_id=task.id,
     )
 
 
@@ -235,14 +248,28 @@ async def send_reply(
 async def bulk_send_reply(
     request: BulkSendReplyRequest,
     background_tasks: BackgroundTasks,
+    session: SessionDependency,
     current_user: RequireOperator,
 ) -> BulkSendReplyResponse:
     if not request.confirmed:
         raise HTTPException(status_code=400, detail="Bulk send requires confirmation")
-    background_tasks.add_task(_send_replies_in_background, request.review_ids, current_user.id)
+    task = await _create_background_job(
+        session,
+        job_type="bulk_developer_reply_send",
+        source_type="steam_community",
+        requested_limit=len(request.review_ids),
+        details={"review_ids": request.review_ids, "created_by_user_id": current_user.id},
+    )
+    background_tasks.add_task(
+        _send_replies_in_background,
+        task.id,
+        request.review_ids,
+        current_user.id,
+    )
     return BulkSendReplyResponse(
         accepted_count=len(request.review_ids),
         review_ids=request.review_ids,
+        task_id=task.id,
     )
 
 
@@ -293,18 +320,74 @@ async def update_review_status(
     return ReviewStatusUpdateResponse(updated_count=1)
 
 
-async def _generate_reply_drafts_in_background(review_ids: list[int]) -> None:
+async def _generate_reply_drafts_in_background(task_id: int, review_ids: list[int]) -> None:
     async with AsyncSessionLocal() as session:
+        task = await session.get(SyncJob, task_id)
+        if task is None:
+            return
+        task.status = "running"
+        task.started_at = datetime.now(tz=CHINA_TZ)
+        await add_task_log(
+            session,
+            task.id,
+            "批量生成回复草稿开始",
+            details={"review_count": len(review_ids)},
+        )
+        success_count = 0
+        failed_count = 0
         service = ReplyGenerationService(session)
         for review_id in review_ids:
             try:
                 await service.generate_for_review(review_id)
+                success_count += 1
+                await add_task_log(
+                    session,
+                    task.id,
+                    "回复草稿生成成功",
+                    details={"review_id": review_id},
+                )
             except ReplyGenerationError:
+                failed_count += 1
+                await add_task_log(
+                    session,
+                    task.id,
+                    "回复草稿生成失败",
+                    level="error",
+                    details={"review_id": review_id},
+                )
                 continue
+        task.status = task_status_from_counts(success_count, failed_count)
+        task.inserted_count = success_count
+        task.skipped_count = failed_count
+        task.finished_at = datetime.now(tz=CHINA_TZ)
+        await add_task_log(
+            session,
+            task.id,
+            "批量生成回复草稿完成",
+            details={"success_count": success_count, "failed_count": failed_count},
+        )
+        await session.commit()
 
 
-async def _send_replies_in_background(review_ids: list[int], sent_by_user_id: int | None) -> None:
+async def _send_replies_in_background(
+    task_id: int,
+    review_ids: list[int],
+    sent_by_user_id: int | None,
+) -> None:
     async with AsyncSessionLocal() as session:
+        task = await session.get(SyncJob, task_id)
+        if task is None:
+            return
+        task.status = "running"
+        task.started_at = datetime.now(tz=CHINA_TZ)
+        await add_task_log(
+            session,
+            task.id,
+            "批量发送开发者回复开始",
+            details={"review_count": len(review_ids), "sent_by_user_id": sent_by_user_id},
+        )
+        success_count = 0
+        failed_count = 0
         service = DeveloperReplyService(session)
         for review_id in review_ids:
             try:
@@ -313,8 +396,64 @@ async def _send_replies_in_background(review_ids: list[int], sent_by_user_id: in
                     confirmed=True,
                     sent_by_user_id=sent_by_user_id,
                 )
+                success_count += 1
+                await add_task_log(
+                    session,
+                    task.id,
+                    "开发者回复发送成功",
+                    details={"review_id": review_id},
+                )
             except DeveloperReplyError:
+                failed_count += 1
+                await add_task_log(
+                    session,
+                    task.id,
+                    "开发者回复发送失败",
+                    level="error",
+                    details={"review_id": review_id},
+                )
                 continue
+        task.status = task_status_from_counts(success_count, failed_count)
+        task.inserted_count = success_count
+        task.skipped_count = failed_count
+        task.finished_at = datetime.now(tz=CHINA_TZ)
+        await add_task_log(
+            session,
+            task.id,
+            "批量发送开发者回复完成",
+            details={"success_count": success_count, "failed_count": failed_count},
+        )
+        await session.commit()
+
+
+async def _create_background_job(
+    session: AsyncSession,
+    *,
+    job_type: str,
+    source_type: str,
+    requested_limit: int,
+    details: dict,
+) -> SyncJob:
+    task = SyncJob(
+        job_type=job_type,
+        source_type=source_type,
+        status="pending",
+        requested_limit=requested_limit,
+    )
+    session.add(task)
+    await session.flush()
+    await add_task_log(session, task.id, "任务已进入队列", details=details)
+    await session.commit()
+    await session.refresh(task)
+    return task
+
+
+def task_status_from_counts(success_count: int, failed_count: int) -> str:
+    if failed_count == 0:
+        return "success"
+    if success_count == 0:
+        return "failed"
+    return "partial_success"
 
 
 def _apply_review_filters(

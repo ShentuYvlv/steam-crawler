@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -35,3 +35,13 @@ class TaskSchedule(TimestampMixin, Base):
     hour: Mapped[int | None] = mapped_column(Integer)
     minute: Mapped[int | None] = mapped_column(Integer)
     options: Mapped[dict | None] = mapped_column(JSON)
+
+
+class TaskLog(TimestampMixin, Base):
+    __tablename__ = "task_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("sync_jobs.id"), nullable=False, index=True)
+    level: Mapped[str] = mapped_column(String(20), default="info", nullable=False)
+    message: Mapped[str] = mapped_column(String(500), nullable=False)
+    details: Mapped[dict | None] = mapped_column(JSON)

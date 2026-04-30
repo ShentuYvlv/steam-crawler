@@ -181,6 +181,21 @@ export type SyncJob = {
   created_at: string;
 };
 
+export type TaskLog = {
+  id: number;
+  task_id: number;
+  level: string;
+  message: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type SyncJobDetail = SyncJob & {
+  error_message: string | null;
+  updated_at: string;
+  logs: TaskLog[];
+};
+
 export type TaskSchedule = {
   id: number;
   task_type: string;
@@ -357,8 +372,16 @@ export async function createReplyDeleteRequest(
   });
 }
 
-export async function fetchTasks(): Promise<SyncJob[]> {
-  return apiGet<SyncJob[]>("/tasks");
+export async function fetchTasks(limit = 100): Promise<SyncJob[]> {
+  return apiGet<SyncJob[]>(`/tasks?limit=${limit}`);
+}
+
+export async function fetchTaskDetail(taskId: number): Promise<SyncJobDetail> {
+  return apiGet<SyncJobDetail>(`/tasks/${taskId}`);
+}
+
+export async function fetchTaskLogs(taskId: number): Promise<TaskLog[]> {
+  return apiGet<TaskLog[]>(`/tasks/${taskId}/logs`);
 }
 
 export async function enqueueReviewSync(payload: {

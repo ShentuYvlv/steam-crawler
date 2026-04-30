@@ -32,6 +32,7 @@ from app.schemas.review_sync import (
     ReviewSyncResponse,
     SyncJobDetailResponse,
     SyncJobListItem,
+    TaskLogResponse,
 )
 from app.schemas.reviews import (
     BulkReviewStatusUpdateRequest,
@@ -76,6 +77,7 @@ __all__ = [
     "StatsTimeseriesResponse",
     "SyncJobDetailResponse",
     "SyncJobListItem",
+    "TaskLogResponse",
     "TaskScheduleResponse",
     "TaskScheduleUpdate",
     "UserCreate",

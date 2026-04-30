@@ -1,3 +1,9 @@
+from app.schemas.reply_strategies import (
+    ReplyExample,
+    ReplyStrategyCreate,
+    ReplyStrategyResponse,
+    ReplyStrategyUpdate,
+)
 from app.schemas.review_sync import (
     ReviewSyncRequest,
     ReviewSyncResponse,
@@ -22,6 +28,10 @@ __all__ = [
     "ReviewSyncResponse",
     "ReviewStatusUpdateRequest",
     "ReviewStatusUpdateResponse",
+    "ReplyExample",
+    "ReplyStrategyCreate",
+    "ReplyStrategyResponse",
+    "ReplyStrategyUpdate",
     "SyncJobDetailResponse",
     "SyncJobListItem",
 ]

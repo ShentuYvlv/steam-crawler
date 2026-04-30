@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -20,6 +20,12 @@ class ReplyStrategy(TimestampMixin, Base):
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     prompt_template: Mapped[str] = mapped_column(Text, nullable=False)
+    reply_rules: Mapped[str | None] = mapped_column(Text)
+    forbidden_terms: Mapped[list[str] | None] = mapped_column(JSON)
+    good_examples: Mapped[list[dict] | None] = mapped_column(JSON)
+    brand_voice: Mapped[str | None] = mapped_column(Text)
+    classification_strategy: Mapped[str | None] = mapped_column(Text)
+    version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     model_name: Mapped[str] = mapped_column(String(120), default="qwen-plus", nullable=False)
     temperature: Mapped[float | None]
     is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
@@ -31,6 +37,7 @@ class ReplyDraft(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     review_id: Mapped[int] = mapped_column(ForeignKey("steam_reviews.id"), nullable=False)
     strategy_id: Mapped[int | None] = mapped_column(ForeignKey("reply_strategies.id"))
+    strategy_version: Mapped[int | None] = mapped_column(Integer)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
     model_name: Mapped[str | None] = mapped_column(String(120))

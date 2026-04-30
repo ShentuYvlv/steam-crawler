@@ -20,3 +20,12 @@ body {
   box-sizing: border-box;
 }
 
+@layer components {
+  .form-input {
+    @apply h-11 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100;
+  }
+
+  .form-textarea {
+    @apply rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100;
+  }
+}

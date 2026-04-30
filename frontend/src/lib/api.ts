@@ -63,6 +63,44 @@ export type ReviewQuery = {
   page_size?: number;
 };
 
+export type ReplyExample = {
+  title: string;
+  review: string;
+  reply: string;
+};
+
+export type ReplyStrategy = {
+  id: number;
+  name: string;
+  description: string | null;
+  prompt_template: string;
+  reply_rules: string | null;
+  forbidden_terms: string[];
+  good_examples: ReplyExample[];
+  brand_voice: string | null;
+  classification_strategy: string | null;
+  model_name: string;
+  temperature: number | null;
+  version: number;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ReplyStrategyPayload = {
+  name: string;
+  description?: string | null;
+  prompt_template: string;
+  reply_rules?: string | null;
+  forbidden_terms?: string[];
+  good_examples?: ReplyExample[];
+  brand_voice?: string | null;
+  classification_strategy?: string | null;
+  model_name?: string;
+  temperature?: number | null;
+  is_active?: boolean;
+};
+
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
   return apiGet<ReviewListResponse>(`/reviews${toQueryString(query)}`);
 }
@@ -88,6 +126,37 @@ export async function bulkUpdateReviewStatus(
   return apiRequest("/reviews/bulk-status", {
     method: "POST",
     body: JSON.stringify({ review_ids: reviewIds, ...body })
+  });
+}
+
+export async function fetchReplyStrategies(): Promise<ReplyStrategy[]> {
+  return apiGet<ReplyStrategy[]>("/reply-strategies");
+}
+
+export async function fetchActiveReplyStrategy(): Promise<ReplyStrategy> {
+  return apiGet<ReplyStrategy>("/reply-strategies/active");
+}
+
+export async function createReplyStrategy(payload: ReplyStrategyPayload): Promise<ReplyStrategy> {
+  return apiRequest<ReplyStrategy>("/reply-strategies", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateReplyStrategy(
+  strategyId: number,
+  payload: Partial<ReplyStrategyPayload>
+): Promise<ReplyStrategy> {
+  return apiRequest<ReplyStrategy>(`/reply-strategies/${strategyId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function activateReplyStrategy(strategyId: number): Promise<ReplyStrategy> {
+  return apiRequest<ReplyStrategy>(`/reply-strategies/${strategyId}/activate`, {
+    method: "POST"
   });
 }
 

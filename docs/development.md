@@ -129,6 +129,24 @@ curl -X POST http://localhost:8000/api/reviews/bulk-status \
   -d '{"review_ids":[1,2,3],"processing_status":"ignored"}'
 ```
 
+## 回复策略配置
+
+策略配置页面：
+
+```bash
+http://localhost:5173/reply-strategies
+```
+
+后端接口：
+
+```bash
+curl http://localhost:8000/api/reply-strategies
+curl http://localhost:8000/api/reply-strategies/active
+curl -X POST http://localhost:8000/api/reply-strategies/1/activate
+```
+
+策略字段包括 Prompt 模板、回复规则、禁忌项、优秀案例、品牌调性、分类策略、模型名称和温度。每次编辑保存会递增 `version`，后续 AI 草稿会记录当时使用的策略版本。
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。

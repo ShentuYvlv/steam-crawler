@@ -32,6 +32,12 @@ function RootLayout() {
             >
               评论
             </Link>
+            <Link
+              to="/reply-strategies"
+              className="rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-sky-700 [&.active]:shadow-sm"
+            >
+              策略
+            </Link>
           </nav>
         </div>
       </header>
@@ -60,6 +66,13 @@ function RootLayout() {
           >
             <MessageSquareText className="h-4 w-4" aria-hidden="true" />
             评论列表
+          </Link>
+          <Link
+            to="/reply-strategies"
+            className="group relative flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-950 [&.active]:border-sky-100 [&.active]:bg-sky-50 [&.active]:text-sky-700 [&.active]:shadow-sm"
+          >
+            <Settings2 className="h-4 w-4" aria-hidden="true" />
+            回复策略
           </Link>
         </nav>
         <div className="absolute inset-x-4 bottom-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4">

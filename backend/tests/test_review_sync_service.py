@@ -1,17 +1,24 @@
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from app.models import Base, SteamReview, SyncJob
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 
+CHINA_TZ = ZoneInfo("Asia/Shanghai")
+
 
 class FakeCommentScraper:
     def __init__(self) -> None:
         self.closed = False
+        self.kwargs = None
 
     async def scrape_app_comments(self, **kwargs):
         assert kwargs["app_id"] == 3350200
         assert kwargs["filter_type"] == "recent"
+        self.kwargs = kwargs
         return {
             "app_id": 3350200,
             "query_summary": {"total_reviews": 1},
@@ -74,3 +81,34 @@ async def test_review_sync_service_upserts_reviews_and_records_job() -> None:
     assert reviews[0].source_type == "steam_api"
     assert len(jobs) == 1
     assert jobs[0].status == "success"
+
+
+async def test_review_sync_service_uses_latest_local_review_timestamp() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    scraper = FakeCommentScraper()
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        session.add(
+            SteamReview(
+                app_id=3350200,
+                recommendation_id="existing",
+                review_text="existing review",
+                timestamp_created=datetime.fromtimestamp(1777250000, tz=CHINA_TZ),
+                sync_type="stock",
+                source_type="csv",
+            )
+        )
+        await session.commit()
+
+        service = SteamReviewSyncService(session, scraper_factory=lambda: scraper)
+        result = await service.sync_reviews(ReviewSyncOptions(app_id=3350200))
+
+    await engine.dispose()
+
+    assert result.status == "success"
+    assert scraper.kwargs is not None
+    assert scraper.kwargs["limit"] is None
+    assert scraper.kwargs["since_timestamp"] == 1777250000

@@ -40,6 +40,11 @@ class Settings(BaseSettings):
         default="./data/steam_cookie.txt",
         validation_alias="STEAM_COOKIE_FILE",
     )
+    task_scheduler_enabled: bool = Field(default=True, validation_alias="TASK_SCHEDULER_ENABLED")
+    task_scheduler_poll_seconds: int = Field(
+        default=60,
+        validation_alias="TASK_SCHEDULER_POLL_SECONDS",
+    )
 
     cors_origins: list[str] = [
         "http://localhost:5173",

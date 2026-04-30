@@ -16,9 +16,8 @@ import { rootRoute } from "@/routes/__root";
 function TasksPage() {
   const queryClient = useQueryClient();
   const [appId, setAppId] = useState("3350200");
-  const [limit, setLimit] = useState("100");
   const [enabled, setEnabled] = useState(false);
-  const [interval, setInterval] = useState("hourly");
+  const [interval, setInterval] = useState("daily");
   const jobsQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const scheduleQuery = useQuery({ queryKey: ["tasks-schedule"], queryFn: fetchTaskSchedule });
 
@@ -34,7 +33,6 @@ function TasksPage() {
     mutationFn: () =>
       enqueueReviewSync({
         app_id: Number(appId),
-        limit: limit ? Number(limit) : null,
         language: "schinese",
         filter: "recent",
         review_type: "all",
@@ -54,9 +52,12 @@ function TasksPage() {
         interval,
         minute: 0,
         options: {
-          limit: limit ? Number(limit) : null,
           language: "schinese",
-          filter: "recent"
+          filter: "recent",
+          review_type: "all",
+          purchase_type: "all",
+          use_review_quality: true,
+          per_page: 100
         }
       }),
     onSuccess: () => {
@@ -73,13 +74,14 @@ function TasksPage() {
           </div>
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">任务与同步</h1>
-            <p className="mt-1 text-sm text-slate-500">手动触发 Steam 增量同步，并保存定时同步配置。</p>
+            <p className="mt-1 text-sm text-slate-500">
+              按评论表最新时间增量追新，直到 Steam 没有更新评论为止。
+            </p>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-4">
+        <div className="mt-6 grid gap-4 rounded-3xl border border-slate-100 bg-slate-50/80 p-4 md:grid-cols-[1fr_1fr_1.1fr]">
           <Field label="App ID" value={appId} onChange={setAppId} />
-          <Field label="同步条数" value={limit} onChange={setLimit} />
           <label className="flex flex-col gap-2 text-sm">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">频率</span>
             <select
@@ -91,7 +93,7 @@ function TasksPage() {
               <option value="daily">每天</option>
             </select>
           </label>
-          <label className="flex items-end gap-2 rounded-2xl bg-white px-3 py-3 text-sm text-slate-700">
+          <label className="flex items-center gap-2 rounded-2xl bg-white px-3 py-3 text-sm text-slate-700">
             <input
               type="checkbox"
               checked={enabled}
@@ -99,6 +101,9 @@ function TasksPage() {
             />
             启用定时同步
           </label>
+          <div className="rounded-2xl border border-sky-100 bg-sky-50/70 px-4 py-3 text-xs leading-5 text-sky-800 md:col-span-3">
+            同步策略：固定使用 Steam 最新排序，从第一页开始抓取；遇到早于本地最新评论时间的数据即停止。
+          </div>
         </div>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -161,7 +166,9 @@ function TaskCard({ job }: { job: SyncJob }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-950">#{job.id} · {job.job_type}</p>
-          <p className="mt-1 text-xs text-slate-500">App {job.app_id ?? "-"} · limit {job.requested_limit ?? "-"}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            App {job.app_id ?? "-"} · 按最新评论时间追新
+          </p>
         </div>
         <span className="rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
           {job.status}

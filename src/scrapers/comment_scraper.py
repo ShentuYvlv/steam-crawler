@@ -64,6 +64,7 @@ class CommentScraper:
         self,
         app_id: int,
         limit: Optional[int] = None,
+        since_timestamp: Optional[int] = None,
         language: str = "schinese",
         filter_type: str = "recent",
         review_type: str = "all",
@@ -77,6 +78,7 @@ class CommentScraper:
         reviews: list[dict[str, Any]] = []
         query_summary: dict[str, Any] = {}
         seen_recommendation_ids: set[str] = set()
+        reached_since_timestamp = False
 
         while True:
             if self.stop_event and self.stop_event.is_set():
@@ -105,6 +107,12 @@ class CommentScraper:
 
             added = 0
             for review in page_reviews:
+                timestamp_created = self._parse_timestamp(review.get("timestamp_created"))
+                if since_timestamp is not None and timestamp_created is not None:
+                    if timestamp_created < since_timestamp:
+                        reached_since_timestamp = True
+                        break
+
                 recommendation_id = str(review.get("recommendationid", ""))
                 if recommendation_id and recommendation_id in seen_recommendation_ids:
                     continue
@@ -121,6 +129,9 @@ class CommentScraper:
                 reviews = reviews[:limit]
                 break
 
+            if reached_since_timestamp:
+                break
+
             next_cursor = data.get("cursor")
             if not next_cursor or next_cursor == cursor or added == 0:
                 break
@@ -133,6 +144,15 @@ class CommentScraper:
             "review_count": len(reviews),
             "reviews": reviews,
         }
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> Optional[int]:
+        if value is None or value == "":
+            return None
+        try:
+            return int(float(value))
+        except (TypeError, ValueError):
+            return None
 
     async def close(self) -> None:
         await self.client.close()

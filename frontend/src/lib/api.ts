@@ -363,7 +363,6 @@ export async function fetchTasks(): Promise<SyncJob[]> {
 
 export async function enqueueReviewSync(payload: {
   app_id: number;
-  limit?: number | null;
   language?: string;
   filter?: string;
   review_type?: string;

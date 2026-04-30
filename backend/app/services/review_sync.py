@@ -1,13 +1,14 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.importers import steam_api_review_to_values
-from app.models import SyncJob
+from app.models import SteamReview, SyncJob
 from app.repositories import SteamReviewRepository
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -18,6 +19,7 @@ class CommentScraperProtocol(Protocol):
         self,
         app_id: int,
         limit: int | None = None,
+        since_timestamp: int | None = None,
         language: str = "schinese",
         filter_type: str = "recent",
         review_type: str = "all",
@@ -89,11 +91,18 @@ class SteamReviewSyncService:
         skipped = 0
         query_summary: dict[str, Any] = {}
         scraper = self.scraper_factory()
+        latest_review = await self.get_latest_review(options.app_id)
+        latest_review_created_at = latest_review.timestamp_created if latest_review else None
+        since_timestamp = datetime_to_epoch_seconds(
+            latest_review_created_at,
+            source_type=latest_review.source_type if latest_review else None,
+        )
 
         try:
             result = await scraper.scrape_app_comments(
                 app_id=options.app_id,
                 limit=options.limit,
+                since_timestamp=since_timestamp,
                 language=options.language,
                 filter_type=options.filter,
                 review_type=options.review_type,
@@ -102,6 +111,10 @@ class SteamReviewSyncService:
                 use_review_quality=options.use_review_quality,
             )
             query_summary = result.get("query_summary") or {}
+            query_summary["local_latest_review_created_at"] = (
+                latest_review_created_at.isoformat() if latest_review_created_at else None
+            )
+            query_summary["since_timestamp"] = since_timestamp
 
             for review in result.get("reviews", []):
                 values = steam_api_review_to_values(options.app_id, review)
@@ -138,8 +151,29 @@ class SteamReviewSyncService:
             query_summary=query_summary,
         )
 
+    async def get_latest_review(self, app_id: int) -> SteamReview | None:
+        result = await self.session.execute(
+            select(SteamReview)
+            .where(
+                SteamReview.app_id == app_id,
+                SteamReview.timestamp_created.is_not(None),
+            )
+            .order_by(desc(SteamReview.timestamp_created), desc(SteamReview.id))
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
 
 def create_comment_scraper() -> CommentScraperProtocol:
     from src.scrapers.comment_scraper import CommentScraper
 
     return CommentScraper()
+
+
+def datetime_to_epoch_seconds(value: datetime | None, source_type: str | None = None) -> int | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        timezone = CHINA_TZ if source_type == "csv" else UTC
+        value = value.replace(tzinfo=timezone)
+    return int(value.timestamp())

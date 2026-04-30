@@ -52,9 +52,9 @@ async def test_task_schedule_and_list_routes() -> None:
                 json={
                     "is_enabled": True,
                     "app_id": 3350200,
-                    "interval": "hourly",
+                    "interval": "daily",
                     "minute": 0,
-                    "options": {"limit": 100},
+                    "options": {"language": "schinese", "filter": "recent"},
                 },
             )
             get_schedule_response = await client.get("/api/tasks/schedule")

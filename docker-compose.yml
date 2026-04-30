@@ -10,6 +10,8 @@ services:
       ALIYUN_API_KEY: ${ALIYUN_API_KEY:-}
       ALIYUN_MODEL: ${ALIYUN_MODEL:-qwen-plus}
       STEAM_COOKIE_FILE: ${STEAM_COOKIE_FILE:-/app/data/steam_cookie.txt}
+      TASK_SCHEDULER_ENABLED: ${TASK_SCHEDULER_ENABLED:-true}
+      TASK_SCHEDULER_POLL_SECONDS: ${TASK_SCHEDULER_POLL_SECONDS:-60}
     ports:
       - "8000:8000"
     extra_hosts:

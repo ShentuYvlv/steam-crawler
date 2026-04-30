@@ -177,6 +177,58 @@ curl http://localhost:8000/api/reply-drafts/1
 
 生成结果会写入 `reply_drafts`，状态为 `pending_review`；生成失败会写入 `generation_failed` 草稿并记录 `error_message`，不会自动发送到 Steam。
 
+## 审核、发送与回复记录
+
+评论详情展开后会显示 AI 回复审核区。发送前必须人工点击确认，后端才会读取 `STEAM_COOKIE_FILE` 并调用 Steam Community 的 `setdeveloperresponse/{recommendationid}`。
+
+核心接口：
+
+```bash
+curl -X PATCH http://localhost:8000/api/reply-drafts/1 \
+  -H "Content-Type: application/json" \
+  -d '{"content":"修改后的回复草稿"}'
+
+curl -X POST http://localhost:8000/api/reviews/1/send-reply \
+  -H "Content-Type: application/json" \
+  -d '{"draft_id":1,"confirmed":true}'
+
+curl http://localhost:8000/api/reply-records
+
+curl -X POST http://localhost:8000/api/reply-records/1/delete-request \
+  -H "Content-Type: application/json" \
+  -d '{"confirmed":true,"reason":"运营后台记录删除诉求"}'
+```
+
+删除请求只写入本地数据库，不实际调用 Steam 删除接口。
+
+## 任务与定时同步
+
+任务页面：
+
+```bash
+http://localhost:5173/tasks
+```
+
+当前版本使用 FastAPI 后台任务承接手动同步，接口和数据结构已按后续 Redis/arq 队列迁移预留。
+
+```bash
+curl http://localhost:8000/api/tasks
+
+curl -X POST http://localhost:8000/api/tasks/reviews-sync \
+  -H "Content-Type: application/json" \
+  -d '{"app_id":3350200,"limit":100,"language":"schinese","filter":"recent"}'
+
+curl -X PATCH http://localhost:8000/api/tasks/schedule \
+  -H "Content-Type: application/json" \
+  -d '{"is_enabled":true,"app_id":3350200,"interval":"hourly","minute":0,"options":{"limit":100}}'
+```
+
+已发送回复页面：
+
+```bash
+http://localhost:5173/reply-records
+```
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。

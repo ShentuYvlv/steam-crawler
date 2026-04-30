@@ -116,6 +116,55 @@ export type ReplyDraft = {
   updated_at: string;
 };
 
+export type ReplyRecord = {
+  id: number;
+  review_id: number;
+  draft_id: number | null;
+  recommendation_id: string;
+  content: string;
+  status: string;
+  steam_response: string | null;
+  error_message: string | null;
+  sent_at: string | null;
+  delete_status: string;
+  delete_request_reason: string | null;
+  delete_requested_at: string | null;
+  created_at: string;
+  updated_at: string;
+  app_id?: number;
+  review_text?: string;
+  persona_name?: string | null;
+  voted_up?: boolean | null;
+};
+
+export type SyncJob = {
+  id: number;
+  app_id: number | null;
+  job_type: string;
+  source_type: string;
+  status: string;
+  requested_limit: number | null;
+  inserted_count: number;
+  updated_count: number;
+  skipped_count: number;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+};
+
+export type TaskSchedule = {
+  id: number;
+  task_type: string;
+  is_enabled: boolean;
+  app_id: number | null;
+  interval: string;
+  hour: number | null;
+  minute: number | null;
+  options: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
   return apiGet<ReviewListResponse>(`/reviews${toQueryString(query)}`);
 }
@@ -161,6 +210,88 @@ export async function bulkGenerateReplyDrafts(
 
 export async function fetchReplyDraft(draftId: number): Promise<ReplyDraft> {
   return apiGet<ReplyDraft>(`/reply-drafts/${draftId}`);
+}
+
+export async function fetchReviewReplyDrafts(reviewId: number): Promise<ReplyDraft[]> {
+  return apiGet<ReplyDraft[]>(`/reviews/${reviewId}/reply-drafts`);
+}
+
+export async function updateReplyDraft(
+  draftId: number,
+  payload: { content?: string; status?: string }
+): Promise<ReplyDraft> {
+  return apiRequest<ReplyDraft>(`/reply-drafts/${draftId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function sendReviewReply(
+  reviewId: number,
+  payload: { draft_id?: number; content?: string; confirmed: boolean }
+): Promise<{ record: ReplyRecord }> {
+  return apiRequest<{ record: ReplyRecord }>(`/reviews/${reviewId}/send-reply`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function regenerateReplyDraft(reviewId: number): Promise<{ draft: ReplyDraft }> {
+  return apiRequest<{ draft: ReplyDraft }>(`/reviews/${reviewId}/regenerate-reply`, {
+    method: "POST"
+  });
+}
+
+export async function fetchReplyRecords(): Promise<ReplyRecord[]> {
+  return apiGet<ReplyRecord[]>("/reply-records");
+}
+
+export async function createReplyDeleteRequest(
+  recordId: number,
+  payload: { confirmed: boolean; reason?: string | null }
+): Promise<ReplyRecord> {
+  return apiRequest<ReplyRecord>(`/reply-records/${recordId}/delete-request`, {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function fetchTasks(): Promise<SyncJob[]> {
+  return apiGet<SyncJob[]>("/tasks");
+}
+
+export async function enqueueReviewSync(payload: {
+  app_id: number;
+  limit?: number | null;
+  language?: string;
+  filter?: string;
+  review_type?: string;
+  purchase_type?: string;
+  use_review_quality?: boolean;
+  per_page?: number;
+}): Promise<SyncJob> {
+  return apiRequest<SyncJob>("/tasks/reviews-sync", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function fetchTaskSchedule(): Promise<TaskSchedule | null> {
+  return apiGet<TaskSchedule | null>("/tasks/schedule");
+}
+
+export async function updateTaskSchedule(payload: {
+  is_enabled: boolean;
+  app_id?: number | null;
+  interval: string;
+  hour?: number | null;
+  minute?: number | null;
+  options?: Record<string, unknown>;
+}): Promise<TaskSchedule> {
+  return apiRequest<TaskSchedule>("/tasks/schedule", {
+    method: "PATCH",
+    body: JSON.stringify(payload)
+  });
 }
 
 export async function fetchReplyStrategies(): Promise<ReplyStrategy[]> {

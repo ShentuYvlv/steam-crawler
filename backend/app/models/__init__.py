@@ -3,7 +3,7 @@ from app.models.base import Base
 from app.models.game import SteamGame
 from app.models.reply import DeveloperReply, ReplyDraft, ReplyStrategy
 from app.models.review import SteamReview
-from app.models.sync import SyncJob
+from app.models.sync import SyncJob, TaskSchedule
 from app.models.user import User
 
 __all__ = [
@@ -15,5 +15,6 @@ __all__ = [
     "SteamGame",
     "SteamReview",
     "SyncJob",
+    "TaskSchedule",
     "User",
 ]

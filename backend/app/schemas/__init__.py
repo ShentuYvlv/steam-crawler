@@ -3,6 +3,16 @@ from app.schemas.reply_drafts import (
     BulkGenerateReplyResponse,
     GenerateReplyResponse,
     ReplyDraftResponse,
+    ReplyDraftUpdate,
+)
+from app.schemas.reply_records import (
+    BulkSendReplyRequest,
+    BulkSendReplyResponse,
+    DeleteRequestCreate,
+    ReplyRecordListItem,
+    ReplyRecordResponse,
+    SendReplyRequest,
+    SendReplyResponse,
 )
 from app.schemas.reply_strategies import (
     ReplyExample,
@@ -24,14 +34,21 @@ from app.schemas.reviews import (
     ReviewStatusUpdateRequest,
     ReviewStatusUpdateResponse,
 )
+from app.schemas.tasks import TaskScheduleResponse, TaskScheduleUpdate
 
 __all__ = [
     "BulkReviewStatusUpdateRequest",
     "BulkGenerateReplyRequest",
     "BulkGenerateReplyResponse",
+    "BulkSendReplyRequest",
+    "BulkSendReplyResponse",
+    "DeleteRequestCreate",
     "GenerateReplyResponse",
     "ReviewDetailResponse",
     "ReplyDraftResponse",
+    "ReplyDraftUpdate",
+    "ReplyRecordListItem",
+    "ReplyRecordResponse",
     "ReviewListItem",
     "ReviewListResponse",
     "ReviewSyncRequest",
@@ -42,6 +59,10 @@ __all__ = [
     "ReplyStrategyCreate",
     "ReplyStrategyResponse",
     "ReplyStrategyUpdate",
+    "SendReplyRequest",
+    "SendReplyResponse",
     "SyncJobDetailResponse",
     "SyncJobListItem",
+    "TaskScheduleResponse",
+    "TaskScheduleUpdate",
 ]

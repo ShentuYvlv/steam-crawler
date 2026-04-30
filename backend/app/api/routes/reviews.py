@@ -6,21 +6,27 @@ from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_session
-from app.models import SteamReview, SyncJob
+from app.models import ReplyDraft, SteamReview, SyncJob
 from app.schemas import (
     BulkGenerateReplyRequest,
     BulkGenerateReplyResponse,
     BulkReviewStatusUpdateRequest,
+    BulkSendReplyRequest,
+    BulkSendReplyResponse,
     GenerateReplyResponse,
+    ReplyDraftResponse,
     ReviewDetailResponse,
     ReviewListResponse,
     ReviewStatusUpdateRequest,
     ReviewStatusUpdateResponse,
     ReviewSyncRequest,
     ReviewSyncResponse,
+    SendReplyRequest,
+    SendReplyResponse,
     SyncJobDetailResponse,
     SyncJobListItem,
 )
+from app.services.developer_replies import DeveloperReplyError, DeveloperReplyService
 from app.services.reply_generation import ReplyGenerationError, ReplyGenerationService
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 
@@ -189,6 +195,69 @@ async def generate_reply(
     return GenerateReplyResponse(draft=result.draft)
 
 
+@router.post("/{review_id}/regenerate-reply", response_model=GenerateReplyResponse)
+async def regenerate_reply(
+    review_id: int,
+    session: SessionDependency,
+) -> GenerateReplyResponse:
+    return await generate_reply(review_id, session)
+
+
+@router.post("/{review_id}/send-reply", response_model=SendReplyResponse)
+async def send_reply(
+    review_id: int,
+    request: SendReplyRequest,
+    session: SessionDependency,
+) -> SendReplyResponse:
+    service = DeveloperReplyService(session)
+    try:
+        record = await service.send_reply(
+            review_id,
+            confirmed=request.confirmed,
+            draft_id=request.draft_id,
+            content=request.content,
+        )
+    except DeveloperReplyError as exc:
+        status_code = 404 if str(exc) in {"Review not found", "Reply draft not found"} else 400
+        if exc.record_id is not None:
+            status_code = 502
+        raise HTTPException(
+            status_code=status_code,
+            detail={"message": str(exc), "record_id": exc.record_id},
+        ) from exc
+    return SendReplyResponse(record=record)
+
+
+@router.post("/bulk-send-reply", response_model=BulkSendReplyResponse, status_code=202)
+async def bulk_send_reply(
+    request: BulkSendReplyRequest,
+    background_tasks: BackgroundTasks,
+) -> BulkSendReplyResponse:
+    if not request.confirmed:
+        raise HTTPException(status_code=400, detail="Bulk send requires confirmation")
+    background_tasks.add_task(_send_replies_in_background, request.review_ids)
+    return BulkSendReplyResponse(
+        accepted_count=len(request.review_ids),
+        review_ids=request.review_ids,
+    )
+
+
+@router.get("/{review_id}/reply-drafts", response_model=list[ReplyDraftResponse])
+async def list_review_reply_drafts(
+    review_id: int,
+    session: SessionDependency,
+) -> list[ReplyDraft]:
+    review = await session.get(SteamReview, review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+    result = await session.execute(
+        select(ReplyDraft)
+        .where(ReplyDraft.review_id == review_id)
+        .order_by(desc(ReplyDraft.created_at), desc(ReplyDraft.id))
+    )
+    return list(result.scalars().all())
+
+
 @router.get("/{review_id}", response_model=ReviewDetailResponse)
 async def get_review(
     review_id: int,
@@ -227,6 +296,16 @@ async def _generate_reply_drafts_in_background(review_ids: list[int]) -> None:
             try:
                 await service.generate_for_review(review_id)
             except ReplyGenerationError:
+                continue
+
+
+async def _send_replies_in_background(review_ids: list[int]) -> None:
+    async with AsyncSessionLocal() as session:
+        service = DeveloperReplyService(session)
+        for review_id in review_ids:
+            try:
+                await service.send_reply(review_id, confirmed=True)
+            except DeveloperReplyError:
                 continue
 
 

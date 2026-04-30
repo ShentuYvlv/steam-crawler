@@ -14,15 +14,19 @@ import {
   ThumbsUp,
   UserRound
 } from "lucide-react";
-import { Fragment, useMemo, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
   bulkGenerateReplyDrafts,
   bulkUpdateReviewStatus,
   fetchReviewDetail,
+  fetchReviewReplyDrafts,
   fetchReviews,
   generateReplyDraft,
+  regenerateReplyDraft,
+  sendReviewReply,
+  updateReplyDraft,
   updateReviewStatus,
   type ReviewDetail,
   type ReviewListItem,
@@ -771,11 +775,9 @@ function ReviewDetailPanel({
         </div>
       ) : null}
 
-      <div className="mt-5 flex flex-wrap gap-2">
-        <Button type="button" disabled={generating} onClick={onGenerate}>
-          <Sparkles className="h-4 w-4" aria-hidden="true" />
-          {generating ? "生成中..." : "生成 AI 草稿"}
-        </Button>
+      <ReplyDraftAuditPanel review={review} fallbackGenerating={generating} onFallbackGenerate={onGenerate} />
+
+      <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-5">
         <Button type="button" variant="outline" disabled={busy} onClick={() => onMark("on_hold")}>
           标记待定
         </Button>
@@ -784,6 +786,138 @@ function ReviewDetailPanel({
         </Button>
       </div>
     </div>
+  );
+}
+
+function ReplyDraftAuditPanel({
+  review,
+  fallbackGenerating,
+  onFallbackGenerate
+}: {
+  review: ReviewDetail;
+  fallbackGenerating: boolean;
+  onFallbackGenerate: () => void;
+}) {
+  const queryClient = useQueryClient();
+  const [draftText, setDraftText] = useState("");
+  const draftsQuery = useQuery({
+    queryKey: ["review-drafts", review.id],
+    queryFn: () => fetchReviewReplyDrafts(review.id)
+  });
+  const latestDraft = draftsQuery.data?.[0];
+
+  useEffect(() => {
+    setDraftText(latestDraft?.content ?? "");
+  }, [latestDraft?.content, latestDraft?.id]);
+
+  const saveDraftMutation = useMutation({
+    mutationFn: () => updateReplyDraft(latestDraft?.id as number, { content: draftText }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
+    }
+  });
+  const regenerateMutation = useMutation({
+    mutationFn: () => regenerateReplyDraft(review.id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+    }
+  });
+  const sendMutation = useMutation({
+    mutationFn: () =>
+      sendReviewReply(review.id, {
+        draft_id: latestDraft?.id,
+        content: draftText,
+        confirmed: true
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+    }
+  });
+
+  const canSend = draftText.trim().length > 0 && !sendMutation.isPending;
+
+  return (
+    <section className="mt-5 rounded-3xl border border-sky-100 bg-sky-50/50 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-slate-950">AI 回复审核</p>
+          <p className="mt-1 text-xs text-slate-500">发送前必须人工确认，可修改草稿后再发送。</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={regenerateMutation.isPending || fallbackGenerating}
+            onClick={() => {
+              if (latestDraft) {
+                regenerateMutation.mutate();
+                return;
+              }
+              onFallbackGenerate();
+            }}
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            {regenerateMutation.isPending || fallbackGenerating ? "生成中..." : "重新生成"}
+          </Button>
+        </div>
+      </div>
+
+      {draftsQuery.isLoading ? (
+        <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-4 text-sm text-slate-500">
+          草稿加载中...
+        </div>
+      ) : null}
+
+      {latestDraft?.error_message ? (
+        <div className="mt-4 rounded-2xl border border-rose-100 bg-rose-50 p-4 text-sm text-rose-700">
+          生成失败：{latestDraft.error_message}
+        </div>
+      ) : null}
+
+      <textarea
+        className="mt-4 min-h-36 w-full rounded-3xl border border-slate-200 bg-white p-4 text-sm leading-7 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-sky-300 focus:ring-4 focus:ring-sky-100"
+        value={draftText}
+        onChange={(event) => setDraftText(event.target.value)}
+        placeholder="暂无草稿，点击“重新生成”生成 AI 回复草稿。"
+      />
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          disabled={!latestDraft || saveDraftMutation.isPending || draftText.trim().length === 0}
+          onClick={() => saveDraftMutation.mutate()}
+        >
+          保存修改
+        </Button>
+        <Button
+          type="button"
+          disabled={!canSend}
+          onClick={() => {
+            if (window.confirm("确认发送这条开发者回复到 Steam？")) {
+              sendMutation.mutate();
+            }
+          }}
+        >
+          通过并发送
+        </Button>
+        <span className="text-xs text-slate-500">
+          {latestDraft ? `草稿 #${latestDraft.id} · ${latestDraft.status}` : "当前没有草稿"}
+        </span>
+      </div>
+
+      {saveDraftMutation.isError || sendMutation.isError || regenerateMutation.isError ? (
+        <p className="mt-3 text-xs font-medium text-rose-600">
+          {(saveDraftMutation.error as Error | null)?.message ||
+            (sendMutation.error as Error | null)?.message ||
+            (regenerateMutation.error as Error | null)?.message}
+        </p>
+      ) : null}
+    </section>
   );
 }
 

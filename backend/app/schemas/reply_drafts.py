@@ -24,6 +24,11 @@ class GenerateReplyResponse(BaseModel):
     draft: ReplyDraftResponse
 
 
+class ReplyDraftUpdate(BaseModel):
+    content: str | None = Field(default=None, min_length=1)
+    status: str | None = Field(default=None, min_length=1, max_length=50)
+
+
 class BulkGenerateReplyRequest(BaseModel):
     review_ids: list[int] = Field(min_length=1, max_length=1000)
 

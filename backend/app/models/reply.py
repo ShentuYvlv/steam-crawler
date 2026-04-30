@@ -62,5 +62,8 @@ class DeveloperReply(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sent_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    delete_status: Mapped[str] = mapped_column(String(50), default="none", nullable=False)
+    delete_request_reason: Mapped[str | None] = mapped_column(Text)
+    delete_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     review: Mapped[SteamReview] = relationship(back_populates="developer_replies")

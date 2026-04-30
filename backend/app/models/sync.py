@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -22,3 +22,16 @@ class SyncJob(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TaskSchedule(TimestampMixin, Base):
+    __tablename__ = "task_schedules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_type: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    app_id: Mapped[int | None] = mapped_column(Integer)
+    interval: Mapped[str] = mapped_column(String(50), default="hourly", nullable=False)
+    hour: Mapped[int | None] = mapped_column(Integer)
+    minute: Mapped[int | None] = mapped_column(Integer)
+    options: Mapped[dict | None] = mapped_column(JSON)

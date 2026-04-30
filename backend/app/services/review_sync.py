@@ -41,6 +41,7 @@ class ReviewSyncOptions:
     purchase_type: str = "all"
     use_review_quality: bool = True
     per_page: int = 100
+    sync_job_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -65,15 +66,22 @@ class SteamReviewSyncService:
         self.scraper_factory = scraper_factory or create_comment_scraper
 
     async def sync_reviews(self, options: ReviewSyncOptions) -> ReviewSyncResult:
-        sync_job = SyncJob(
-            app_id=options.app_id,
-            job_type="steam_review_sync",
-            source_type="steam_api",
-            status="running",
-            requested_limit=options.limit,
-            started_at=datetime.now(tz=CHINA_TZ),
-        )
-        self.session.add(sync_job)
+        if options.sync_job_id is not None:
+            sync_job = await self.session.get(SyncJob, options.sync_job_id)
+            if sync_job is None:
+                raise ValueError(f"Sync job not found: {options.sync_job_id}")
+            sync_job.status = "running"
+            sync_job.started_at = datetime.now(tz=CHINA_TZ)
+        else:
+            sync_job = SyncJob(
+                app_id=options.app_id,
+                job_type="steam_review_sync",
+                source_type="steam_api",
+                status="running",
+                requested_limit=options.limit,
+                started_at=datetime.now(tz=CHINA_TZ),
+            )
+            self.session.add(sync_job)
         await self.session.flush()
 
         inserted = 0

@@ -1,14 +1,17 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.database import get_session
+from app.core.database import AsyncSessionLocal, get_session
 from app.models import SteamReview, SyncJob
 from app.schemas import (
+    BulkGenerateReplyRequest,
+    BulkGenerateReplyResponse,
     BulkReviewStatusUpdateRequest,
+    GenerateReplyResponse,
     ReviewDetailResponse,
     ReviewListResponse,
     ReviewStatusUpdateRequest,
@@ -18,6 +21,7 @@ from app.schemas import (
     SyncJobDetailResponse,
     SyncJobListItem,
 )
+from app.services.reply_generation import ReplyGenerationError, ReplyGenerationService
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
@@ -154,6 +158,37 @@ async def bulk_update_review_status(
     return ReviewStatusUpdateResponse(updated_count=result.rowcount or 0)
 
 
+@router.post("/bulk-generate-reply", response_model=BulkGenerateReplyResponse, status_code=202)
+async def bulk_generate_reply(
+    request: BulkGenerateReplyRequest,
+    background_tasks: BackgroundTasks,
+) -> BulkGenerateReplyResponse:
+    background_tasks.add_task(_generate_reply_drafts_in_background, request.review_ids)
+    return BulkGenerateReplyResponse(
+        accepted_count=len(request.review_ids),
+        review_ids=request.review_ids,
+    )
+
+
+@router.post("/{review_id}/generate-reply", response_model=GenerateReplyResponse)
+async def generate_reply(
+    review_id: int,
+    session: SessionDependency,
+) -> GenerateReplyResponse:
+    service = ReplyGenerationService(session)
+    try:
+        result = await service.generate_for_review(review_id)
+    except ReplyGenerationError as exc:
+        status_code = 404 if str(exc) == "Review not found" else 400
+        if exc.draft_id is not None:
+            status_code = 502
+        raise HTTPException(
+            status_code=status_code,
+            detail={"message": str(exc), "draft_id": exc.draft_id},
+        ) from exc
+    return GenerateReplyResponse(draft=result.draft)
+
+
 @router.get("/{review_id}", response_model=ReviewDetailResponse)
 async def get_review(
     review_id: int,
@@ -183,6 +218,16 @@ async def update_review_status(
         setattr(review, key, value)
     await session.commit()
     return ReviewStatusUpdateResponse(updated_count=1)
+
+
+async def _generate_reply_drafts_in_background(review_ids: list[int]) -> None:
+    async with AsyncSessionLocal() as session:
+        service = ReplyGenerationService(session)
+        for review_id in review_ids:
+            try:
+                await service.generate_for_review(review_id)
+            except ReplyGenerationError:
+                continue
 
 
 def _apply_review_filters(

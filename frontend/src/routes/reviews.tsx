@@ -7,22 +7,22 @@ import {
   ChevronRight,
   Clock3,
   Inbox,
-  MessageSquareText,
   RefreshCcw,
   Search,
   SlidersHorizontal,
   Sparkles,
   ThumbsUp,
-  UserRound,
-  X
+  UserRound
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
+  bulkGenerateReplyDrafts,
   bulkUpdateReviewStatus,
   fetchReviewDetail,
   fetchReviews,
+  generateReplyDraft,
   updateReviewStatus,
   type ReviewDetail,
   type ReviewListItem,
@@ -63,6 +63,7 @@ function ReviewsPage() {
   const [filters, setFilters] = useState<ReviewQuery>(defaultFilters);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [activeReviewId, setActiveReviewId] = useState<number | null>(null);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
   const reviewsQuery = useQuery({
     queryKey: ["reviews", filters],
     queryFn: () => fetchReviews(filters)
@@ -87,6 +88,28 @@ function ReviewsPage() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reviews"] });
       void queryClient.invalidateQueries({ queryKey: ["review"] });
+    }
+  });
+  const generateDraftMutation = useMutation({
+    mutationFn: (reviewId: number) => generateReplyDraft(reviewId),
+    onSuccess: (response) => {
+      setDraftNotice(`已生成草稿 #${response.draft.id}，状态：${response.draft.status}`);
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["review"] });
+    },
+    onError: (error) => {
+      setDraftNotice(error instanceof Error ? error.message : "生成草稿失败");
+    }
+  });
+  const bulkGenerateDraftMutation = useMutation({
+    mutationFn: () => bulkGenerateReplyDrafts(selectedIds),
+    onSuccess: (response) => {
+      setDraftNotice(`已提交 ${response.accepted_count} 条评论进入草稿生成队列`);
+      setSelectedIds([]);
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+    },
+    onError: (error) => {
+      setDraftNotice(error instanceof Error ? error.message : "批量生成草稿失败");
     }
   });
   const totalPages = useMemo(() => {
@@ -277,8 +300,19 @@ function ReviewsPage() {
           <p className="mt-1 text-xs text-slate-500">
             已选择 {selectedIds.length} 条评论，可批量调整处理状态。
           </p>
+          {draftNotice ? <p className="mt-2 text-xs font-medium text-sky-700">{draftNotice}</p> : null}
         </div>
-        <div className="flex w-full gap-2 sm:w-auto">
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <Button
+            type="button"
+            variant="secondary"
+            className="flex-1 sm:flex-none"
+            disabled={selectedIds.length === 0 || bulkGenerateDraftMutation.isPending}
+            onClick={() => bulkGenerateDraftMutation.mutate()}
+          >
+            <Sparkles className="h-4 w-4" aria-hidden="true" />
+            批量生成草稿
+          </Button>
           <Button
             type="button"
             variant="outline"
@@ -300,12 +334,12 @@ function ReviewsPage() {
         </div>
       </section>
 
-      <section className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_420px] 2xl:grid-cols-[minmax(0,1fr)_440px]">
+      <section className="mt-5">
         <div className="overflow-hidden rounded-[1.75rem] border border-white/70 bg-white shadow-xl shadow-slate-200/70">
           <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold text-slate-950">评论数据</h2>
-              <p className="mt-1 text-xs text-slate-500">按当前筛选条件展示，点击评论查看右侧详情。</p>
+              <p className="mt-1 text-xs text-slate-500">按当前筛选条件展示，点击评论后在当前行下方展开详情。</p>
             </div>
             <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
               {reviewsQuery.isFetching ? "同步视图中" : "视图已更新"}
@@ -343,14 +377,29 @@ function ReviewsPage() {
               <tbody className="divide-y divide-slate-100">
                 {reviewsQuery.isLoading ? <TableMessage message="评论数据加载中..." /> : null}
                 {items.map((item) => (
-                  <ReviewRow
-                    key={item.id}
-                    item={item}
-                    selected={selectedIds.includes(item.id)}
-                    active={activeReviewId === item.id}
-                    onToggle={() => toggleReview(item.id)}
-                    onOpen={() => setActiveReviewId(item.id)}
-                  />
+                  <Fragment key={item.id}>
+                    <ReviewRow
+                      item={item}
+                      selected={selectedIds.includes(item.id)}
+                      active={activeReviewId === item.id}
+                      onToggle={() => toggleReview(item.id)}
+                      onOpen={() =>
+                        setActiveReviewId((current) => (current === item.id ? null : item.id))
+                      }
+                    />
+                    {activeReviewId === item.id ? (
+                      <ExpandedReviewDetailRow
+                        review={detailQuery.data}
+                        loading={detailQuery.isLoading}
+                        busy={singleStatusMutation.isPending}
+                        generating={generateDraftMutation.isPending}
+                        onMark={(status) =>
+                          singleStatusMutation.mutate({ reviewId: item.id, status })
+                        }
+                        onGenerate={() => generateDraftMutation.mutate(item.id)}
+                      />
+                    ) : null}
+                  </Fragment>
                 ))}
                 {!reviewsQuery.isLoading && items.length === 0 ? <EmptyTableState /> : null}
               </tbody>
@@ -363,14 +412,27 @@ function ReviewsPage() {
               </div>
             ) : null}
             {items.map((item) => (
-              <MobileReviewCard
-                key={item.id}
-                item={item}
-                selected={selectedIds.includes(item.id)}
-                active={activeReviewId === item.id}
-                onToggle={() => toggleReview(item.id)}
-                onOpen={() => setActiveReviewId(item.id)}
-              />
+              <Fragment key={item.id}>
+                <MobileReviewCard
+                  item={item}
+                  selected={selectedIds.includes(item.id)}
+                  active={activeReviewId === item.id}
+                  onToggle={() => toggleReview(item.id)}
+                  onOpen={() =>
+                    setActiveReviewId((current) => (current === item.id ? null : item.id))
+                  }
+                />
+                {activeReviewId === item.id ? (
+                  <MobileExpandedReviewDetail
+                    review={detailQuery.data}
+                    loading={detailQuery.isLoading}
+                    busy={singleStatusMutation.isPending}
+                    generating={generateDraftMutation.isPending}
+                    onMark={(status) => singleStatusMutation.mutate({ reviewId: item.id, status })}
+                    onGenerate={() => generateDraftMutation.mutate(item.id)}
+                  />
+                ) : null}
+              </Fragment>
             ))}
             {!reviewsQuery.isLoading && items.length === 0 ? (
               <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
@@ -383,50 +445,6 @@ function ReviewsPage() {
             ) : null}
           </div>
         </div>
-
-        {activeReviewId !== null ? (
-          <button
-            type="button"
-            className="fixed inset-0 z-40 bg-slate-950/20 backdrop-blur-[2px] xl:hidden"
-            aria-label="关闭评论详情"
-            onClick={() => setActiveReviewId(null)}
-          />
-        ) : null}
-        <aside
-          className={
-            activeReviewId === null
-              ? "hidden rounded-[1.75rem] border border-white/80 bg-white p-5 shadow-xl shadow-slate-200/70 xl:block xl:sticky xl:top-6 xl:self-start"
-              : "fixed inset-x-3 bottom-3 top-20 z-50 overflow-y-auto rounded-[1.75rem] border border-white/80 bg-white p-5 shadow-2xl shadow-slate-900/20 xl:sticky xl:inset-auto xl:top-6 xl:z-auto xl:self-start xl:shadow-xl xl:shadow-slate-200/70"
-          }
-        >
-          {activeReviewId === null ? (
-            <ReviewEmptyState />
-          ) : detailQuery.isLoading ? (
-            <div className="rounded-3xl border border-slate-100 bg-slate-50 p-5 text-sm text-slate-500">
-              详情加载中...
-            </div>
-          ) : detailQuery.data ? (
-            <>
-              <button
-                type="button"
-                className="absolute right-4 top-4 rounded-full border border-slate-200 bg-white p-2 text-slate-500 shadow-sm xl:hidden"
-                aria-label="关闭评论详情"
-                onClick={() => setActiveReviewId(null)}
-              >
-                <X className="h-4 w-4" aria-hidden="true" />
-              </button>
-              <ReviewDetailPanel
-                review={detailQuery.data}
-                busy={singleStatusMutation.isPending}
-                onMark={(status) => singleStatusMutation.mutate({ reviewId: detailQuery.data.id, status })}
-              />
-            </>
-          ) : (
-            <div className="rounded-3xl border border-rose-100 bg-rose-50 p-5 text-sm text-rose-600">
-              详情加载失败。
-            </div>
-          )}
-        </aside>
       </section>
 
       <footer className="mt-5 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/80 bg-white/82 px-4 py-4 shadow-lg shadow-slate-200/50 sm:justify-end sm:px-5">
@@ -595,14 +613,120 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function ExpandedReviewDetailRow({
+  review,
+  loading,
+  busy,
+  generating,
+  onMark,
+  onGenerate
+}: {
+  review: ReviewDetail | undefined;
+  loading: boolean;
+  busy: boolean;
+  generating: boolean;
+  onMark: (status: string) => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <tr className="bg-slate-50/80">
+      <td colSpan={7} className="px-5 py-5">
+        <InlineReviewDetail
+          review={review}
+          loading={loading}
+          busy={busy}
+          generating={generating}
+          onMark={onMark}
+          onGenerate={onGenerate}
+        />
+      </td>
+    </tr>
+  );
+}
+
+function MobileExpandedReviewDetail({
+  review,
+  loading,
+  busy,
+  generating,
+  onMark,
+  onGenerate
+}: {
+  review: ReviewDetail | undefined;
+  loading: boolean;
+  busy: boolean;
+  generating: boolean;
+  onMark: (status: string) => void;
+  onGenerate: () => void;
+}) {
+  return (
+    <InlineReviewDetail
+      review={review}
+      loading={loading}
+      busy={busy}
+      generating={generating}
+      onMark={onMark}
+      onGenerate={onGenerate}
+    />
+  );
+}
+
+function InlineReviewDetail({
+  review,
+  loading,
+  busy,
+  generating,
+  onMark,
+  onGenerate
+}: {
+  review: ReviewDetail | undefined;
+  loading: boolean;
+  busy: boolean;
+  generating: boolean;
+  onMark: (status: string) => void;
+  onGenerate: () => void;
+}) {
+  if (loading) {
+    return (
+      <div className="rounded-3xl border border-slate-100 bg-white p-5 text-sm text-slate-500 shadow-sm">
+        详情加载中...
+      </div>
+    );
+  }
+
+  if (!review) {
+    return (
+      <div className="rounded-3xl border border-rose-100 bg-rose-50 p-5 text-sm text-rose-600">
+        详情加载失败。
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[1.5rem] border border-sky-100 bg-white p-5 shadow-sm shadow-sky-100/60">
+      <ReviewDetailPanel
+        review={review}
+        busy={busy}
+        generating={generating}
+        onMark={onMark}
+        onGenerate={onGenerate}
+      />
+    </div>
+  );
+}
+
 function ReviewDetailPanel({
   review,
   busy,
-  onMark
+  generating,
+  onMark,
+  onGenerate
 }: {
   review: ReviewDetail;
   busy: boolean;
+  generating: boolean;
   onMark: (status: string) => void;
+  onGenerate: () => void;
 }) {
   return (
     <div>
@@ -647,7 +771,11 @@ function ReviewDetailPanel({
         </div>
       ) : null}
 
-      <div className="mt-5 flex gap-2">
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Button type="button" disabled={generating} onClick={onGenerate}>
+          <Sparkles className="h-4 w-4" aria-hidden="true" />
+          {generating ? "生成中..." : "生成 AI 草稿"}
+        </Button>
         <Button type="button" variant="outline" disabled={busy} onClick={() => onMark("on_hold")}>
           标记待定
         </Button>
@@ -655,20 +783,6 @@ function ReviewDetailPanel({
           忽略
         </Button>
       </div>
-    </div>
-  );
-}
-
-function ReviewEmptyState() {
-  return (
-    <div className="flex min-h-[420px] flex-col items-center justify-center rounded-3xl border border-dashed border-slate-200 bg-slate-50/80 p-8 text-center">
-      <div className="flex h-16 w-16 items-center justify-center rounded-3xl bg-white text-sky-600 shadow-lg shadow-slate-200">
-        <MessageSquareText className="h-7 w-7" aria-hidden="true" />
-      </div>
-      <h2 className="mt-5 text-lg font-semibold text-slate-950">选择一条评论查看详情</h2>
-      <p className="mt-2 max-w-xs text-sm leading-6 text-slate-500">
-        右侧会展示评论正文、用户信息、状态、互动数据和后续可执行的运营动作。
-      </p>
     </div>
   );
 }

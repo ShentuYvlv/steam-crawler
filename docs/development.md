@@ -147,6 +147,36 @@ curl -X POST http://localhost:8000/api/reply-strategies/1/activate
 
 策略字段包括 Prompt 模板、回复规则、禁忌项、优秀案例、品牌调性、分类策略、模型名称和温度。每次编辑保存会递增 `version`，后续 AI 草稿会记录当时使用的策略版本。
 
+## AI 回复草稿生成
+
+生成草稿前必须配置：
+
+- `ALIYUN_API_KEY`：阿里云 DashScope 兼容 OpenAI 模式 API Key。
+- `ALIYUN_MODEL`：默认 `qwen-plus`，也可在回复策略里按策略覆盖模型名称。
+- 至少存在一个已启用回复策略。
+
+单条生成：
+
+```bash
+curl -X POST http://localhost:8000/api/reviews/1/generate-reply
+```
+
+批量生成：
+
+```bash
+curl -X POST http://localhost:8000/api/reviews/bulk-generate-reply \
+  -H "Content-Type: application/json" \
+  -d '{"review_ids":[1,2,3]}'
+```
+
+查询草稿：
+
+```bash
+curl http://localhost:8000/api/reply-drafts/1
+```
+
+生成结果会写入 `reply_drafts`，状态为 `pending_review`；生成失败会写入 `generation_failed` 草稿并记录 `error_message`，不会自动发送到 Steam。
+
 ## 约束
 
 - 发送开发者回复必须经过人工审核。

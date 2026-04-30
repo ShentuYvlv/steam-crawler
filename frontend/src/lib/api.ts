@@ -101,6 +101,21 @@ export type ReplyStrategyPayload = {
   is_active?: boolean;
 };
 
+export type ReplyDraft = {
+  id: number;
+  review_id: number;
+  strategy_id: number | null;
+  strategy_version: number | null;
+  content: string;
+  status: string;
+  model_name: string | null;
+  prompt_snapshot: string | null;
+  error_message: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
   return apiGet<ReviewListResponse>(`/reviews${toQueryString(query)}`);
 }
@@ -127,6 +142,25 @@ export async function bulkUpdateReviewStatus(
     method: "POST",
     body: JSON.stringify({ review_ids: reviewIds, ...body })
   });
+}
+
+export async function generateReplyDraft(reviewId: number): Promise<{ draft: ReplyDraft }> {
+  return apiRequest<{ draft: ReplyDraft }>(`/reviews/${reviewId}/generate-reply`, {
+    method: "POST"
+  });
+}
+
+export async function bulkGenerateReplyDrafts(
+  reviewIds: number[]
+): Promise<{ accepted_count: number; review_ids: number[] }> {
+  return apiRequest<{ accepted_count: number; review_ids: number[] }>("/reviews/bulk-generate-reply", {
+    method: "POST",
+    body: JSON.stringify({ review_ids: reviewIds })
+  });
+}
+
+export async function fetchReplyDraft(draftId: number): Promise<ReplyDraft> {
+  return apiGet<ReplyDraft>(`/reply-drafts/${draftId}`);
 }
 
 export async function fetchReplyStrategies(): Promise<ReplyStrategy[]> {

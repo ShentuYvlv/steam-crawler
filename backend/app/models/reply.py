@@ -42,6 +42,7 @@ class ReplyDraft(TimestampMixin, Base):
     status: Mapped[str] = mapped_column(String(50), default="draft", nullable=False)
     model_name: Mapped[str | None] = mapped_column(String(120))
     prompt_snapshot: Mapped[str | None] = mapped_column(Text)
+    error_message: Mapped[str | None] = mapped_column(Text)
     reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

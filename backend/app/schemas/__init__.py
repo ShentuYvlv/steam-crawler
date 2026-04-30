@@ -1,3 +1,9 @@
+from app.schemas.reply_drafts import (
+    BulkGenerateReplyRequest,
+    BulkGenerateReplyResponse,
+    GenerateReplyResponse,
+    ReplyDraftResponse,
+)
 from app.schemas.reply_strategies import (
     ReplyExample,
     ReplyStrategyCreate,
@@ -21,7 +27,11 @@ from app.schemas.reviews import (
 
 __all__ = [
     "BulkReviewStatusUpdateRequest",
+    "BulkGenerateReplyRequest",
+    "BulkGenerateReplyResponse",
+    "GenerateReplyResponse",
     "ReviewDetailResponse",
+    "ReplyDraftResponse",
     "ReviewListItem",
     "ReviewListResponse",
     "ReviewSyncRequest",

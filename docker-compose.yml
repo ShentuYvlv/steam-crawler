@@ -12,6 +12,8 @@ services:
       STEAM_COOKIE_FILE: ${STEAM_COOKIE_FILE:-/app/data/steam_cookie.txt}
     ports:
       - "8000:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./backend:/app
       - ./src:/app/src

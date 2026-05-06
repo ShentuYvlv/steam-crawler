@@ -1,6 +1,6 @@
 import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Clock3, ListChecks, MessageSquareText, Send, Settings2, Sparkles } from "lucide-react";
+import { BarChart3, Clock3, MessageSquareText, Send, Settings2, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -44,7 +44,7 @@ function RootLayout() {
               <p className="text-xs text-slate-500">Review Operations</p>
             </div>
           </div>
-          <nav className="flex max-w-[62vw] overflow-x-auto rounded-2xl border border-slate-200 bg-slate-50 p-1 text-sm">
+          <nav className="flex rounded-2xl border border-slate-200 bg-slate-50 p-1 text-sm">
             <Link
               to="/"
               className="rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-blue-700 [&.active]:shadow-sm"
@@ -68,12 +68,6 @@ function RootLayout() {
               className="rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-blue-700 [&.active]:shadow-sm"
             >
               任务
-            </Link>
-            <Link
-              to="/task-queue"
-              className="rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-blue-700 [&.active]:shadow-sm"
-            >
-              队列
             </Link>
             {currentUser.role === "admin" ? (
               <Link
@@ -125,13 +119,6 @@ function RootLayout() {
           >
             <Clock3 className="h-4 w-4" aria-hidden="true" />
             任务同步
-          </Link>
-          <Link
-            to="/task-queue"
-            className="group relative flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-950 [&.active]:border-blue-100 [&.active]:bg-blue-50 [&.active]:text-blue-700 [&.active]:shadow-sm"
-          >
-            <ListChecks className="h-4 w-4" aria-hidden="true" />
-            任务队列
           </Link>
           <Link
             to="/reply-records"

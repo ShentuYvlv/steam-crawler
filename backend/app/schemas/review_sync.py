@@ -42,18 +42,6 @@ class SyncJobListItem(BaseModel):
     model_config = {"from_attributes": True}
 
 
-class TaskLogResponse(BaseModel):
-    id: int
-    task_id: int
-    level: str
-    message: str
-    details: dict[str, Any] | None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
 class SyncJobDetailResponse(SyncJobListItem):
     error_message: str | None
     updated_at: datetime
-    logs: list[TaskLogResponse] = Field(default_factory=list)

@@ -12,7 +12,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--host", default="127.0.0.1", help="Bind host. Default: 127.0.0.1")
     parser.add_argument("--port", default=8000, type=int, help="Bind port. Default: 8000")
     parser.add_argument("--no-reload", action="store_true", help="Disable uvicorn auto reload.")
-    parser.add_argument("--skip-migrate", action="store_true", help="Skip Alembic migration before start.")
     return parser.parse_args()
 
 
@@ -39,22 +38,6 @@ def main() -> None:
             "然后再运行：\n"
             "  python run.py"
         ) from exc
-
-    if not args.skip_migrate:
-        try:
-            from alembic import command
-            from alembic.config import Config
-        except ModuleNotFoundError as exc:
-            raise SystemExit(
-                "缺少迁移依赖 alembic。请先执行：\n"
-                "  python -m pip install -e backend\n"
-                "或临时跳过迁移：\n"
-                "  python run.py --skip-migrate"
-            ) from exc
-
-        alembic_config = Config(str(BACKEND_DIR / "alembic.ini"))
-        alembic_config.set_main_option("script_location", str(BACKEND_DIR / "alembic"))
-        command.upgrade(alembic_config, "head")
 
     uvicorn.run(
         "app.main:app",

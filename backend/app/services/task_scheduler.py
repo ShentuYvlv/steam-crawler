@@ -9,7 +9,6 @@ from sqlalchemy import desc, select
 from app.core.database import AsyncSessionLocal
 from app.models import SyncJob, TaskSchedule
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
-from app.services.task_logs import add_task_log
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -79,13 +78,6 @@ class TaskScheduler:
                     requested_limit=None,
                 )
                 session.add(sync_job)
-                await session.flush()
-                await add_task_log(
-                    session,
-                    sync_job.id,
-                    "定时同步任务已触发",
-                    details={"app_id": schedule.app_id, "interval": schedule.interval},
-                )
                 await session.commit()
                 await session.refresh(sync_job)
 

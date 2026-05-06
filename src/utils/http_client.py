@@ -15,17 +15,18 @@ import asyncio
 import random
 import time
 import warnings
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import httpx
-import requests
-import urllib3
 try:
     import orjson
 except ImportError:
     orjson = None
 
 from src.config import Config, get_config
+
+if TYPE_CHECKING:
+    import requests
 
 
 class AsyncHttpClient:
@@ -194,6 +195,10 @@ class HttpClient:
             stacklevel=2,
         )
         self.config = config or get_config()
+        import requests
+        import urllib3
+
+        self._requests = requests
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": self.config.http.user_agent})
 
@@ -239,7 +244,7 @@ class HttpClient:
 
                 return response
 
-            except requests.RequestException as e:
+            except self._requests.RequestException as e:
                 last_exception = e
                 if attempt < self.config.http.max_retries:
                     # 指数退避策略：等待时间 = 2^attempt + 随机抖动

@@ -1,10 +1,11 @@
-import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
+import { Link, Outlet, createRootRoute, useRouterState } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, Clock3, ListOrdered, MessageSquareText, Send, Settings2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { clearAccessToken, fetchMe, fetchTasks, login, setAccessToken } from "@/lib/api";
+import { getUnreadTaskCount, markTasksSeen } from "@/lib/taskNotifications";
 
 export const rootRoute = createRootRoute({
   component: RootLayout
@@ -12,6 +13,8 @@ export const rootRoute = createRootRoute({
 
 function RootLayout() {
   const queryClient = useQueryClient();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const [notificationVersion, setNotificationVersion] = useState(0);
   const meQuery = useQuery({
     queryKey: ["me"],
     queryFn: fetchMe,
@@ -24,9 +27,27 @@ function RootLayout() {
     refetchInterval: 5000
   });
   const currentUser = meQuery.data;
-  const hasTaskAttention = (tasksIndicatorQuery.data ?? []).some((task) =>
-    ["pending", "running", "failed", "partial_success"].includes(task.status)
-  );
+  const unreadTaskCount = getUnreadTaskCount(tasksIndicatorQuery.data ?? []);
+  const hasTaskAttention = unreadTaskCount > 0;
+
+  useEffect(() => {
+    const syncNotifications = () => setNotificationVersion((version) => version + 1);
+    window.addEventListener("storage", syncNotifications);
+    window.addEventListener("task-notification-sync", syncNotifications);
+    return () => {
+      window.removeEventListener("storage", syncNotifications);
+      window.removeEventListener("task-notification-sync", syncNotifications);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (pathname === "/task-queue" && tasksIndicatorQuery.data) {
+      markTasksSeen(tasksIndicatorQuery.data);
+      setNotificationVersion((version) => version + 1);
+    }
+  }, [pathname, tasksIndicatorQuery.data]);
+
+  void notificationVersion;
 
   if (meQuery.isLoading) {
     return (
@@ -84,7 +105,9 @@ function RootLayout() {
             >
               队列
               {hasTaskAttention ? (
-                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-rose-500" />
+                <span className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                  {unreadTaskCount > 9 ? "9+" : unreadTaskCount}
+                </span>
               ) : null}
             </Link>
             {currentUser.role === "admin" ? (
@@ -152,7 +175,9 @@ function RootLayout() {
             <ListOrdered className="h-4 w-4" aria-hidden="true" />
             任务队列
             {hasTaskAttention ? (
-              <span className="absolute right-3 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-rose-500" />
+              <span className="absolute right-3 top-1/2 flex h-4 min-w-4 -translate-y-1/2 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                {unreadTaskCount > 9 ? "9+" : unreadTaskCount}
+              </span>
             ) : null}
           </Link>
           {currentUser.role === "admin" ? (

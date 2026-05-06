@@ -1,0 +1,17 @@
+{
+  "generated_at": "2026-04-29T05:31:14.245467+00:00",
+  "comments_file": "data/comments_3350200.json",
+  "dry_run": false,
+  "requested_count": 1,
+  "success_count": 1,
+  "failed_count": 0,
+  "results": [
+    {
+      "recommendationid": "224190513",
+      "success": true,
+      "response": {
+        "success": 1
+      }
+    }
+  ]
+}

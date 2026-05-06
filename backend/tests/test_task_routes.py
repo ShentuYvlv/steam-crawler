@@ -58,6 +58,8 @@ async def test_task_schedule_and_list_routes() -> None:
                 },
             )
             get_schedule_response = await client.get("/api/tasks/schedule")
+            detail_response = await client.get("/api/tasks/1")
+            logs_response = await client.get("/api/tasks/1/logs")
     finally:
         app.dependency_overrides.clear()
         await engine.dispose()
@@ -68,3 +70,7 @@ async def test_task_schedule_and_list_routes() -> None:
     assert schedule_response.json()["is_enabled"] is True
     assert get_schedule_response.status_code == 200
     assert get_schedule_response.json()["app_id"] == 3350200
+    assert detail_response.status_code == 200
+    assert detail_response.json()["id"] == 1
+    assert "logs" in detail_response.json()
+    assert logs_response.status_code == 200

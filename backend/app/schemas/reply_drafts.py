@@ -36,3 +36,4 @@ class BulkGenerateReplyRequest(BaseModel):
 class BulkGenerateReplyResponse(BaseModel):
     accepted_count: int
     review_ids: list[int]
+    task_id: int | None = None

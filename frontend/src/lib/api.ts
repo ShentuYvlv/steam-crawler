@@ -181,6 +181,21 @@ export type SyncJob = {
   created_at: string;
 };
 
+export type TaskLog = {
+  id: number;
+  task_id: number;
+  level: string;
+  message: string;
+  details: Record<string, unknown> | null;
+  created_at: string;
+};
+
+export type SyncJobDetail = SyncJob & {
+  error_message: string | null;
+  updated_at: string;
+  logs: TaskLog[];
+};
+
 export type TaskSchedule = {
   id: number;
   task_type: string;
@@ -302,8 +317,8 @@ export async function generateReplyDraft(reviewId: number): Promise<{ draft: Rep
 
 export async function bulkGenerateReplyDrafts(
   reviewIds: number[]
-): Promise<{ accepted_count: number; review_ids: number[] }> {
-  return apiRequest<{ accepted_count: number; review_ids: number[] }>("/reviews/bulk-generate-reply", {
+): Promise<{ accepted_count: number; review_ids: number[]; task_id: number | null }> {
+  return apiRequest<{ accepted_count: number; review_ids: number[]; task_id: number | null }>("/reviews/bulk-generate-reply", {
     method: "POST",
     body: JSON.stringify({ review_ids: reviewIds })
   });
@@ -347,6 +362,19 @@ export async function fetchReplyRecords(): Promise<ReplyRecord[]> {
   return apiGet<ReplyRecord[]>("/reply-records");
 }
 
+export async function bulkSendReplyRecords(payload: {
+  review_ids: number[];
+  confirmed: boolean;
+}): Promise<{ accepted_count: number; review_ids: number[]; task_id: number | null }> {
+  return apiRequest<{ accepted_count: number; review_ids: number[]; task_id: number | null }>(
+    "/reviews/bulk-send-reply",
+    {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }
+  );
+}
+
 export async function createReplyDeleteRequest(
   recordId: number,
   payload: { confirmed: boolean; reason?: string | null }
@@ -359,6 +387,14 @@ export async function createReplyDeleteRequest(
 
 export async function fetchTasks(): Promise<SyncJob[]> {
   return apiGet<SyncJob[]>("/tasks");
+}
+
+export async function fetchTaskDetail(taskId: number): Promise<SyncJobDetail> {
+  return apiGet<SyncJobDetail>(`/tasks/${taskId}`);
+}
+
+export async function fetchTaskLogs(taskId: number): Promise<TaskLog[]> {
+  return apiGet<TaskLog[]>(`/tasks/${taskId}/logs`);
 }
 
 export async function enqueueReviewSync(payload: {

@@ -1,6 +1,6 @@
 import { Link, Outlet, createRootRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, Clock3, MessageSquareText, Send, Settings2, Sparkles } from "lucide-react";
+import { BarChart3, Clock3, ListOrdered, MessageSquareText, Send, Settings2, Sparkles } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -69,6 +69,12 @@ function RootLayout() {
             >
               任务
             </Link>
+            <Link
+              to="/task-queue"
+              className="rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-blue-700 [&.active]:shadow-sm"
+            >
+              队列
+            </Link>
             {currentUser.role === "admin" ? (
               <Link
                 to="/users"
@@ -126,6 +132,13 @@ function RootLayout() {
           >
             <Send className="h-4 w-4" aria-hidden="true" />
             回复记录
+          </Link>
+          <Link
+            to="/task-queue"
+            className="group relative flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-950 [&.active]:border-blue-100 [&.active]:bg-blue-50 [&.active]:text-blue-700 [&.active]:shadow-sm"
+          >
+            <ListOrdered className="h-4 w-4" aria-hidden="true" />
+            任务队列
           </Link>
           {currentUser.role === "admin" ? (
             <Link

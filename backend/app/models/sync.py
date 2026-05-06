@@ -1,7 +1,7 @@
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 from app.models.mixins import TimestampMixin
@@ -22,6 +22,11 @@ class SyncJob(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    logs: Mapped[list["TaskLog"]] = relationship(
+        back_populates="task",
+        cascade="all, delete-orphan",
+        order_by="TaskLog.created_at",
+    )
 
 
 class TaskSchedule(TimestampMixin, Base):
@@ -35,3 +40,15 @@ class TaskSchedule(TimestampMixin, Base):
     hour: Mapped[int | None] = mapped_column(Integer)
     minute: Mapped[int | None] = mapped_column(Integer)
     options: Mapped[dict | None] = mapped_column(JSON)
+
+
+class TaskLog(TimestampMixin, Base):
+    __tablename__ = "task_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("sync_jobs.id", ondelete="CASCADE"), index=True)
+    level: Mapped[str] = mapped_column(String(20), default="info", nullable=False)
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    details: Mapped[dict | None] = mapped_column(JSON)
+
+    task: Mapped[SyncJob] = relationship(back_populates="logs")

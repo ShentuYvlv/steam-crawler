@@ -47,6 +47,7 @@ class SendReplyResponse(BaseModel):
 class BulkSendReplyResponse(BaseModel):
     accepted_count: int
     review_ids: list[int]
+    task_id: int | None = None
 
 
 class DeleteRequestCreate(BaseModel):

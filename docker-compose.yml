@@ -2,39 +2,31 @@ services:
   backend:
     build:
       context: .
-      dockerfile: backend/Dockerfile
+      dockerfile: backend/Dockerfile.prod
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://steam:steam@host.docker.internal:5432/steam_reviews}
       REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379/0}
-      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-only-change-me}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me}
       ALIYUN_API_KEY: ${ALIYUN_API_KEY:-}
       ALIYUN_MODEL: ${ALIYUN_MODEL:-qwen-plus}
       STEAM_COOKIE_FILE: ${STEAM_COOKIE_FILE:-/app/data/steam_cookie.txt}
       TASK_SCHEDULER_ENABLED: ${TASK_SCHEDULER_ENABLED:-true}
       TASK_SCHEDULER_POLL_SECONDS: ${TASK_SCHEDULER_POLL_SECONDS:-60}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://127.0.0.1:5173}
-    ports:
-      - "8000:8000"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost,http://127.0.0.1}
+    restart: unless-stopped
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - ./backend:/app
-      - ./src:/app/src
       - ./data:/app/data
 
   frontend:
     build:
       context: .
-      dockerfile: frontend/Dockerfile
-    environment:
-      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000/api}
-    ports:
-      - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - frontend_node_modules:/app/node_modules
+      dockerfile: frontend/Dockerfile.prod
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-/api}
+    restart: unless-stopped
     depends_on:
       - backend
-
-volumes:
-  frontend_node_modules:
+    ports:
+      - "${FRONTEND_PORT:-80}:80"

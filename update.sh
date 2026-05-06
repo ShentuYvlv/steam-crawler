@@ -14,13 +14,6 @@ configure_defaults() {
   ADMIN_ROLE="${ADMIN_ROLE:-admin}"
   STOCK_REVIEWS_APP_ID="${STOCK_REVIEWS_APP_ID:-3350200}"
   STOCK_REVIEWS_FILE="${STOCK_REVIEWS_FILE:-/app/data/情感反诈模拟器-steam评论 - 全部评论.csv}"
-
-  COMPOSE_FILES_DEFAULT=(-f docker-compose.yml)
-  if [[ -n "${COMPOSE_FILES:-}" ]]; then
-    read -r -a COMPOSE_FILES_ARR <<< "$COMPOSE_FILES"
-  else
-    COMPOSE_FILES_ARR=("${COMPOSE_FILES_DEFAULT[@]}")
-  fi
 }
 
 load_dotenv() {
@@ -52,7 +45,7 @@ detect_compose() {
 }
 
 compose() {
-  "${COMPOSE_CMD[@]}" "${COMPOSE_FILES_ARR[@]}" "$@"
+  "${COMPOSE_CMD[@]}" -f docker-compose.yml "$@"
 }
 
 clean_for_compose_v1() {
@@ -176,7 +169,6 @@ usage() {
   ./update.sh no-pull     # 不拉代码，只 build + 迁移/初始化检查 + 重建启动
 
 关键环境变量:
-  COMPOSE_FILES          覆盖 compose 文件，默认: "-f docker-compose.yml"
   ADMIN_PASSWORD         首次创建管理员必填
   STOCK_REVIEWS_APP_ID   默认: 3350200
   STOCK_REVIEWS_FILE     默认: /app/data/情感反诈模拟器-steam评论 - 全部评论.csv

@@ -14,13 +14,6 @@ configure_defaults() {
   ADMIN_ROLE="${ADMIN_ROLE:-admin}"
   STOCK_REVIEWS_APP_ID="${STOCK_REVIEWS_APP_ID:-3350200}"
   STOCK_REVIEWS_FILE="${STOCK_REVIEWS_FILE:-/app/data/情感反诈模拟器-steam评论 - 全部评论.csv}"
-
-  COMPOSE_FILES_DEFAULT=(-f docker-compose.yml)
-  if [[ -n "${COMPOSE_FILES:-}" ]]; then
-    read -r -a COMPOSE_FILES_ARR <<< "$COMPOSE_FILES"
-  else
-    COMPOSE_FILES_ARR=("${COMPOSE_FILES_DEFAULT[@]}")
-  fi
 }
 
 load_dotenv() {
@@ -52,7 +45,7 @@ detect_compose() {
 }
 
 compose() {
-  "${COMPOSE_CMD[@]}" "${COMPOSE_FILES_ARR[@]}" "$@"
+  "${COMPOSE_CMD[@]}" -f docker-compose.yml "$@"
 }
 
 clean_for_compose_v1() {
@@ -176,7 +169,6 @@ usage() {
   ./start.sh init      # 仅检查并创建管理员、导入存量评论
 
 关键环境变量:
-  COMPOSE_FILES          覆盖 compose 文件，默认: "-f docker-compose.yml"
   ADMIN_USERNAME         默认: admin
   ADMIN_PASSWORD         首次创建管理员必填
   ADMIN_DISPLAY_NAME     默认: 管理员

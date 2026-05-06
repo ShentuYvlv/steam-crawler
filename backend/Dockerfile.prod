@@ -1,5 +1,3 @@
-# syntax=docker/dockerfile:1.7
-
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -11,8 +9,7 @@ WORKDIR /tmp/backend
 COPY backend/pyproject.toml /tmp/backend/pyproject.toml
 COPY backend/app /tmp/backend/app
 
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install .
+RUN pip install --no-cache-dir .
 
 WORKDIR /app
 

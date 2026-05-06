@@ -159,12 +159,13 @@ run_init() {
 usage() {
   cat <<'EOF'
 用法:
-  ./start.sh up        # 构建、迁移、初始化管理员/存量评论，并启动服务
+  ./start.sh up        # 迁移、初始化管理员/存量评论，并启动服务（默认不强制重建）
   ./start.sh down      # 停止并移除容器
-  ./start.sh restart   # 重启全部服务，并执行迁移/初始化检查
+  ./start.sh restart   # 重启全部服务，并执行迁移/初始化检查（默认不强制重建）
   ./start.sh status    # 查看服务状态
   ./start.sh logs      # 查看日志（可加服务名）
   ./start.sh build     # 仅构建镜像
+  ./start.sh rebuild   # 强制重建镜像后再迁移/初始化/启动
   ./start.sh migrate   # 仅执行 Alembic 迁移
   ./start.sh init      # 仅检查并创建管理员、导入存量评论
 
@@ -192,7 +193,6 @@ shift || true
 case "$cmd" in
   up)
     clean_for_compose_v1
-    compose build "$BACKEND_SERVICE" "$FRONTEND_SERVICE"
     run_init
     compose up -d "$@"
     ;;
@@ -202,6 +202,11 @@ case "$cmd" in
   restart)
     clean_for_compose_v1
     compose down "$@" || true
+    run_init
+    compose up -d "$@"
+    ;;
+  rebuild)
+    clean_for_compose_v1
     compose build "$BACKEND_SERVICE" "$FRONTEND_SERVICE"
     run_init
     compose up -d "$@"

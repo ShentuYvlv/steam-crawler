@@ -7,11 +7,13 @@
 from __future__ import annotations
 
 import threading
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 from src.config import Config, get_config
 from src.utils.http_client import AsyncHttpClient
-from src.utils.ui import UIManager
+
+if TYPE_CHECKING:
+    from src.utils.ui import UIManager
 
 
 class CommentScraper:
@@ -24,12 +26,12 @@ class CommentScraper:
     def __init__(
         self,
         config: Optional[Config] = None,
-        ui_manager: Optional[UIManager] = None,
+        ui_manager: Optional["UIManager"] = None,
         stop_event: Optional[threading.Event] = None,
     ):
         self.config = config or get_config()
         self.client = AsyncHttpClient(self.config)
-        self.ui = ui_manager or UIManager()
+        self.ui = ui_manager
         self.stop_event = stop_event
 
     def _build_params(

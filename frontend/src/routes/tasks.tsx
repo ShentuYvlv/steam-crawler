@@ -18,6 +18,10 @@ function TasksPage() {
   const [appId, setAppId] = useState("3350200");
   const [enabled, setEnabled] = useState(false);
   const [interval, setInterval] = useState("daily");
+  const [feedback, setFeedback] = useState<{
+    type: "success" | "error";
+    message: string;
+  } | null>(null);
   const jobsQuery = useQuery({ queryKey: ["tasks"], queryFn: fetchTasks });
   const scheduleQuery = useQuery({ queryKey: ["tasks-schedule"], queryFn: fetchTaskSchedule });
 
@@ -28,6 +32,14 @@ function TasksPage() {
       setAppId(String(scheduleQuery.data.app_id ?? 3350200));
     }
   }, [scheduleQuery.data]);
+
+  useEffect(() => {
+    if (!feedback) {
+      return;
+    }
+    const timer = window.setTimeout(() => setFeedback(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [feedback]);
 
   const syncMutation = useMutation({
     mutationFn: () =>
@@ -42,6 +54,10 @@ function TasksPage() {
       }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setFeedback({ type: "success", message: "手动同步任务已提交到队列。" });
+    },
+    onError: (error) => {
+      setFeedback({ type: "error", message: (error as Error).message || "手动同步提交失败。" });
     }
   });
   const scheduleMutation = useMutation({
@@ -60,8 +76,13 @@ function TasksPage() {
           per_page: 100
         }
       }),
-    onSuccess: () => {
+    onSuccess: (schedule) => {
+      queryClient.setQueryData(["tasks-schedule"], schedule);
       void queryClient.invalidateQueries({ queryKey: ["tasks-schedule"] });
+      setFeedback({ type: "success", message: "定时同步配置已保存。" });
+    },
+    onError: (error) => {
+      setFeedback({ type: "error", message: (error as Error).message || "定时配置保存失败。" });
     }
   });
 
@@ -109,7 +130,7 @@ function TasksPage() {
         <div className="mt-4 flex flex-wrap gap-2">
           <Button type="button" disabled={syncMutation.isPending} onClick={() => syncMutation.mutate()}>
             <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            手动同步
+            {syncMutation.isPending ? "提交中..." : "手动同步"}
           </Button>
           <Button
             type="button"
@@ -117,9 +138,20 @@ function TasksPage() {
             disabled={scheduleMutation.isPending}
             onClick={() => scheduleMutation.mutate()}
           >
-            保存定时配置
+            {scheduleMutation.isPending ? "保存中..." : "保存定时配置"}
           </Button>
         </div>
+        {feedback ? (
+          <div
+            className={`mt-4 rounded-2xl border px-4 py-3 text-sm ${
+              feedback.type === "success"
+                ? "border-emerald-200 bg-emerald-50/80 text-emerald-700"
+                : "border-rose-200 bg-rose-50/80 text-rose-700"
+            }`}
+          >
+            {feedback.message}
+          </div>
+        ) : null}
       </section>
 
       <section className="app-card mt-6 p-5">

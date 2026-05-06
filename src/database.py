@@ -18,11 +18,19 @@ except ImportError:
 import json
 import sqlite3
 from pathlib import Path
-from typing import Optional
-
-import pandas as pd
 
 from src.models import GameInfo, ReviewSnapshot
+
+
+def require_pandas():
+    try:
+        import pandas as pd
+    except ImportError as exc:
+        raise RuntimeError(
+            "pandas is required only for export features. "
+            "Install export dependencies before running Excel/CSV export."
+        ) from exc
+    return pd
 
 
 class DatabaseManager:
@@ -234,6 +242,7 @@ class DatabaseManager:
         Args:
             output_file: 输出文件路径。
         """
+        pd = require_pandas()
         with pd.ExcelWriter(output_file, engine="openpyxl") as writer:
             # 导出游戏信息
             games_df = pd.read_sql_query("SELECT * FROM games", self.conn)
@@ -271,6 +280,7 @@ class DatabaseManager:
         Args:
             output_dir: 输出目录。
         """
+        pd = require_pandas()
         output_dir = Path(output_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
         

@@ -4,7 +4,7 @@ import { BarChart3, Clock3, ListOrdered, MessageSquareText, Send, Settings2, Spa
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { clearAccessToken, fetchMe, login, setAccessToken } from "@/lib/api";
+import { clearAccessToken, fetchMe, fetchTasks, login, setAccessToken } from "@/lib/api";
 
 export const rootRoute = createRootRoute({
   component: RootLayout
@@ -17,7 +17,16 @@ function RootLayout() {
     queryFn: fetchMe,
     retry: false
   });
+  const tasksIndicatorQuery = useQuery({
+    queryKey: ["task-indicator"],
+    queryFn: () => fetchTasks(),
+    enabled: !!meQuery.data,
+    refetchInterval: 5000
+  });
   const currentUser = meQuery.data;
+  const hasTaskAttention = (tasksIndicatorQuery.data ?? []).some((task) =>
+    ["pending", "running", "failed", "partial_success"].includes(task.status)
+  );
 
   if (meQuery.isLoading) {
     return (
@@ -71,9 +80,12 @@ function RootLayout() {
             </Link>
             <Link
               to="/task-queue"
-              className="rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-blue-700 [&.active]:shadow-sm"
+              className="relative rounded-xl px-3 py-2 text-slate-500 transition [&.active]:bg-white [&.active]:text-blue-700 [&.active]:shadow-sm"
             >
               队列
+              {hasTaskAttention ? (
+                <span className="absolute right-1.5 top-1.5 h-2.5 w-2.5 rounded-full bg-rose-500" />
+              ) : null}
             </Link>
             {currentUser.role === "admin" ? (
               <Link
@@ -135,10 +147,13 @@ function RootLayout() {
           </Link>
           <Link
             to="/task-queue"
-            className="group relative flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-950 [&.active]:border-blue-100 [&.active]:bg-blue-50 [&.active]:text-blue-700 [&.active]:shadow-sm"
+            className="group relative flex items-center gap-3 rounded-2xl border border-transparent px-3 py-3 pr-9 text-slate-500 transition-all hover:bg-slate-50 hover:text-slate-950 [&.active]:border-blue-100 [&.active]:bg-blue-50 [&.active]:text-blue-700 [&.active]:shadow-sm"
           >
             <ListOrdered className="h-4 w-4" aria-hidden="true" />
             任务队列
+            {hasTaskAttention ? (
+              <span className="absolute right-3 top-1/2 h-2.5 w-2.5 -translate-y-1/2 rounded-full bg-rose-500" />
+            ) : null}
           </Link>
           {currentUser.role === "admin" ? (
             <Link

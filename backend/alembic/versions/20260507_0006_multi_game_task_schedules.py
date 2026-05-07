@@ -1,7 +1,7 @@
 """multi game task schedules and sync job metadata
 
 Revision ID: 20260507_0006
-Revises: 20260430_0005
+Revises: 20260506_0005
 Create Date: 2026-05-07 12:00:00.000000
 """
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "20260507_0006"
-down_revision: str | None = "20260430_0005"
+down_revision: str | None = "20260506_0005"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

@@ -5,7 +5,13 @@ from app.schemas.auth import (
     UserResponse,
     UserUpdate,
 )
-from app.schemas.games import GameListItem
+from app.schemas.games import (
+    GameCreateRequest,
+    GameListItem,
+    GameSyncBatchResponse,
+    GameSyncOptionsPayload,
+    GameUpdateRequest,
+)
 from app.schemas.reply_drafts import (
     BulkGenerateReplyRequest,
     BulkGenerateReplyResponse,
@@ -54,8 +60,12 @@ __all__ = [
     "BulkSendReplyRequest",
     "BulkSendReplyResponse",
     "DeleteRequestCreate",
+    "GameCreateRequest",
     "GenerateReplyResponse",
     "GameListItem",
+    "GameSyncBatchResponse",
+    "GameSyncOptionsPayload",
+    "GameUpdateRequest",
     "LoginRequest",
     "LoginResponse",
     "ReviewDetailResponse",

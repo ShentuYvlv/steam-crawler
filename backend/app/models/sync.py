@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
@@ -40,6 +40,9 @@ class SyncJob(TimestampMixin, Base):
 
 class TaskSchedule(TimestampMixin, Base):
     __tablename__ = "task_schedules"
+    __table_args__ = (
+        UniqueConstraint("task_type", "app_id", name="uq_task_schedules_task_type_app_id"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)

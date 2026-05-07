@@ -8,7 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.core.database import AsyncSessionLocal, get_session
 from app.core.error_utils import format_exception_details, format_exception_message
 from app.core.security import RequireOperator
-from app.models import SyncJob, TaskLog, TaskSchedule
+from app.models import SteamGame, SyncJob, TaskLog, TaskSchedule
 from app.schemas import (
     ReviewSyncRequest,
     SyncJobListItem,
@@ -19,6 +19,7 @@ from app.schemas import (
     TaskScheduleUpdate,
 )
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
+from app.services.review_sync_queue import enqueue_review_sync_job
 from app.services.task_logs import add_task_log
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -30,14 +31,25 @@ async def list_tasks(
     session: SessionDependency,
     limit: int = Query(default=50, gt=0, le=200),
     schedule_id: int | None = Query(default=None, gt=0),
-) -> list[SyncJob]:
-    statement = select(SyncJob)
+    app_id: int | None = Query(default=None, gt=0),
+) -> list[SyncJobListItem]:
+    statement = select(SyncJob, SteamGame.name).outerjoin(
+        SteamGame,
+        SteamGame.app_id == SyncJob.app_id,
+    )
     if schedule_id is not None:
         statement = statement.where(SyncJob.schedule_id == schedule_id)
+    if app_id is not None:
+        statement = statement.where(SyncJob.app_id == app_id)
     result = await session.execute(
         statement.order_by(desc(SyncJob.created_at), desc(SyncJob.id)).limit(limit)
     )
-    return list(result.scalars().all())
+    items: list[dict] = []
+    for job, game_name in result.all():
+        payload = SyncJobListItem.model_validate(job).model_dump()
+        payload["game_name"] = game_name
+        items.append(payload)
+    return items
 
 
 @router.post("/reviews-sync", response_model=SyncJobListItem, status_code=202)
@@ -47,40 +59,7 @@ async def enqueue_reviews_sync(
     session: SessionDependency,
     current_user: RequireOperator,
 ) -> SyncJob:
-    schedule_name: str | None = None
-    if request.schedule_id is not None:
-        schedule = await session.get(TaskSchedule, request.schedule_id)
-        if schedule is None or schedule.task_type != "steam_review_sync":
-            raise HTTPException(status_code=404, detail="Task schedule not found")
-        schedule_name = schedule.name
-
-    sync_job = SyncJob(
-        schedule_id=request.schedule_id,
-        schedule_name=schedule_name,
-        trigger_type="manual",
-        app_id=request.app_id,
-        job_type="steam_review_sync",
-        source_type="steam_api",
-        status="pending",
-        requested_limit=request.limit,
-    )
-    session.add(sync_job)
-    await session.commit()
-    await session.refresh(sync_job)
-    await add_task_log(
-        session,
-        sync_job.id,
-        "任务已进入队列",
-        details={
-            "app_id": request.app_id,
-            "schedule_id": request.schedule_id,
-            "schedule_name": schedule_name,
-            "trigger_type": "manual",
-        },
-    )
-    await session.commit()
-    background_tasks.add_task(_run_review_sync_job, sync_job.id, request)
-    return sync_job
+    return await enqueue_review_sync_job(session, background_tasks, request, _run_review_sync_job)
 
 
 @router.get("/schedules", response_model=list[TaskScheduleResponse])
@@ -99,6 +78,15 @@ async def create_task_schedule(
     session: SessionDependency,
     current_user: RequireOperator,
 ) -> TaskSchedule:
+    existing = await session.execute(
+        select(TaskSchedule).where(
+            TaskSchedule.task_type == "steam_review_sync",
+            TaskSchedule.app_id == request.app_id,
+        )
+    )
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(status_code=409, detail="A schedule already exists for this game")
+
     schedule = TaskSchedule(
         name=request.name,
         task_type="steam_review_sync",
@@ -132,6 +120,15 @@ async def update_task_schedule(
     if "is_enabled" in values and values["is_enabled"] is not None:
         schedule.is_enabled = values["is_enabled"]
     if "app_id" in values and values["app_id"] is not None:
+        existing = await session.execute(
+            select(TaskSchedule).where(
+                TaskSchedule.task_type == "steam_review_sync",
+                TaskSchedule.app_id == values["app_id"],
+                TaskSchedule.id != schedule.id,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            raise HTTPException(status_code=409, detail="A schedule already exists for this game")
         schedule.app_id = values["app_id"]
     if "interval" in values and values["interval"] is not None:
         schedule.interval = values["interval"]
@@ -161,14 +158,20 @@ async def delete_task_schedule(
 
 
 @router.get("/{task_id}", response_model=SyncJobWithLogsResponse)
-async def get_task_detail(task_id: int, session: SessionDependency) -> SyncJob:
+async def get_task_detail(task_id: int, session: SessionDependency) -> SyncJobWithLogsResponse:
     result = await session.execute(
-        select(SyncJob).options(selectinload(SyncJob.logs)).where(SyncJob.id == task_id)
+        select(SyncJob, SteamGame.name)
+        .outerjoin(SteamGame, SteamGame.app_id == SyncJob.app_id)
+        .options(selectinload(SyncJob.logs))
+        .where(SyncJob.id == task_id)
     )
-    task = result.scalar_one_or_none()
-    if task is None:
+    row = result.one_or_none()
+    if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
-    return task
+    task, game_name = row
+    payload = SyncJobWithLogsResponse.model_validate(task).model_dump()
+    payload["game_name"] = game_name
+    return payload
 
 
 @router.get("/{task_id}/logs", response_model=list[TaskLogResponse])

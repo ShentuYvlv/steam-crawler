@@ -150,9 +150,16 @@ ensure_stock_reviews() {
     'python -m app.cli.import_stock_reviews --file "$STOCK_REVIEWS_FILE" --app-id "$STOCK_REVIEWS_APP_ID"'
 }
 
+ensure_seed_games() {
+  echo ">>> 检查游戏清单"
+  compose run --rm --no-deps "$BACKEND_SERVICE" sh -lc \
+    'python -m app.cli.import_seed_games'
+}
+
 run_init() {
   run_migrations
   ensure_admin
+  ensure_seed_games
   ensure_stock_reviews
 }
 

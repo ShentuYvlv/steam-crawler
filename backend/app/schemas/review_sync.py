@@ -32,6 +32,7 @@ class SyncJobListItem(BaseModel):
     schedule_name: str | None
     trigger_type: str
     app_id: int | None
+    game_name: str | None = None
     job_type: str
     source_type: str
     status: str

@@ -3,19 +3,19 @@ import { createRoute } from "@tanstack/react-router";
 import { ListOrdered } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { fetchTaskDetail, fetchTaskSchedules, fetchTasksBySchedule, type SyncJob } from "@/lib/api";
+import { fetchGames, fetchTaskDetail, fetchTasksBySchedule, type SyncJob } from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
 function TaskQueuePage() {
-  const [selectedScheduleId, setSelectedScheduleId] = useState<number | null>(null);
+  const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
   const tasksQuery = useQuery({
-    queryKey: ["task-queue", selectedScheduleId ?? "all"],
-    queryFn: () => fetchTasksBySchedule(selectedScheduleId),
+    queryKey: ["task-queue", selectedAppId ?? "all"],
+    queryFn: () => fetchTasksBySchedule(undefined, selectedAppId),
     refetchInterval: 5000,
   });
-  const schedulesQuery = useQuery({
-    queryKey: ["task-schedules"],
-    queryFn: fetchTaskSchedules,
+  const gamesQuery = useQuery({
+    queryKey: ["games"],
+    queryFn: fetchGames,
   });
   const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
 
@@ -67,15 +67,15 @@ function TaskQueuePage() {
               <span className="field-label">按监控任务筛选</span>
               <select
                 className="form-input"
-                value={selectedScheduleId ?? ""}
+                value={selectedAppId ?? ""}
                 onChange={(event) =>
-                  setSelectedScheduleId(event.target.value ? Number(event.target.value) : null)
+                  setSelectedAppId(event.target.value ? Number(event.target.value) : null)
                 }
               >
                 <option value="">全部任务</option>
-                {(schedulesQuery.data ?? []).map((schedule) => (
-                  <option key={schedule.id} value={schedule.id}>
-                    {schedule.name}
+                {(gamesQuery.data ?? []).map((game) => (
+                  <option key={game.app_id} value={game.app_id}>
+                    {game.name || `App ${game.app_id}`}
                   </option>
                 ))}
               </select>
@@ -100,7 +100,7 @@ function TaskQueuePage() {
                   <span className={statusBadgeClass(task.status)}>{formatTaskStatus(task.status)}</span>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  {task.schedule_name ?? "手动同步"} · {task.trigger_type === "scheduled" ? "定时触发" : "手动触发"} · App {task.app_id ?? "-"}
+                  {(task.game_name || `App ${task.app_id ?? "-"}`) + " · " + (task.trigger_type === "scheduled" ? "定时触发" : "手动触发")}
                 </p>
                 <p className="mt-3 text-sm text-slate-600">
                   新增 {task.inserted_count} / 更新 {task.updated_count} / 跳过 {task.skipped_count}
@@ -134,6 +134,7 @@ function TaskQueuePage() {
 
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <Metric label="监控任务" value={detailQuery.data.schedule_name ?? "手动同步"} />
+                <Metric label="游戏" value={detailQuery.data.game_name ?? `App ${detailQuery.data.app_id ?? "-"}`} />
                 <Metric label="App ID" value={String(detailQuery.data.app_id ?? "-")} />
                 <Metric label="触发方式" value={detailQuery.data.trigger_type === "scheduled" ? "定时" : "手动"} />
                 <Metric label="请求规模" value={String(detailQuery.data.requested_limit ?? "-")} />

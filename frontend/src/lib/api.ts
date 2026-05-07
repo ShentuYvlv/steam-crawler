@@ -27,6 +27,37 @@ export type GameListItem = {
   app_id: number;
   name: string | null;
   review_count: number;
+  has_schedule: boolean;
+  schedule_id: number | null;
+  schedule_name: string | null;
+  schedule_enabled: boolean;
+  schedule_hour: number | null;
+  schedule_options: Record<string, unknown> | null;
+  latest_task_id: number | null;
+  latest_task_status: string | null;
+  latest_task_finished_at: string | null;
+};
+
+export type GameSyncOptionsPayload = {
+  enabled: boolean;
+  hour: number;
+  language?: string;
+  filter?: string;
+  review_type?: string;
+  purchase_type?: string;
+  use_review_quality?: boolean;
+  per_page?: number;
+};
+
+export type GamePayload = {
+  app_id?: number;
+  name: string;
+  sync?: GameSyncOptionsPayload | null;
+};
+
+export type GameSyncBatchResponse = {
+  accepted_count: number;
+  task_ids: number[];
 };
 
 export type LoginResponse = {
@@ -178,6 +209,7 @@ export type SyncJob = {
   schedule_name: string | null;
   trigger_type: string;
   app_id: number | null;
+  game_name: string | null;
   job_type: string;
   source_type: string;
   status: string;
@@ -295,6 +327,32 @@ export async function fetchGames(): Promise<GameListItem[]> {
   return apiGet<GameListItem[]>("/games");
 }
 
+export async function createGame(payload: GamePayload): Promise<GameListItem> {
+  return apiRequest<GameListItem>("/games", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateGame(appId: number, payload: GamePayload): Promise<GameListItem> {
+  return apiRequest<GameListItem>(`/games/${appId}`, {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function syncGame(appId: number): Promise<GameSyncBatchResponse> {
+  return apiRequest<GameSyncBatchResponse>(`/games/${appId}/sync`, {
+    method: "POST",
+  });
+}
+
+export async function syncAllGames(): Promise<GameSyncBatchResponse> {
+  return apiRequest<GameSyncBatchResponse>("/games/sync-all", {
+    method: "POST",
+  });
+}
+
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
   return apiGet<ReviewListResponse>(`/reviews${toQueryString(query)}`);
 }
@@ -403,8 +461,15 @@ export async function fetchTasks(): Promise<SyncJob[]> {
   return apiGet<SyncJob[]>("/tasks");
 }
 
-export async function fetchTasksBySchedule(scheduleId?: number | null): Promise<SyncJob[]> {
-  const query = scheduleId ? `?schedule_id=${scheduleId}` : "";
+export async function fetchTasksBySchedule(scheduleId?: number | null, appId?: number | null): Promise<SyncJob[]> {
+  const params = new URLSearchParams();
+  if (scheduleId) {
+    params.set("schedule_id", String(scheduleId));
+  }
+  if (appId) {
+    params.set("app_id", String(appId));
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
   return apiGet<SyncJob[]>(`/tasks${query}`);
 }
 

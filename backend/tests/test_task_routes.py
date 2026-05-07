@@ -81,6 +81,7 @@ async def test_task_schedule_routes_and_task_filtering(monkeypatch) -> None:
             headers = {"Authorization": f"Bearer {token}"}
             list_response = await client.get("/api/tasks")
             filtered_response = await client.get("/api/tasks?schedule_id=1")
+            app_filtered_response = await client.get("/api/tasks?app_id=3350200")
             schedules_response = await client.get("/api/tasks/schedules")
             create_response = await client.post(
                 "/api/tasks/schedules",
@@ -125,6 +126,9 @@ async def test_task_schedule_routes_and_task_filtering(monkeypatch) -> None:
     assert filtered_response.status_code == 200
     assert len(filtered_response.json()) == 1
     assert filtered_response.json()[0]["schedule_name"] == "主游戏每日同步"
+    assert app_filtered_response.status_code == 200
+    assert len(app_filtered_response.json()) == 1
+    assert app_filtered_response.json()[0]["app_id"] == 3350200
     assert schedules_response.status_code == 200
     assert schedules_response.json()[0]["name"] == "主游戏每日同步"
     assert create_response.status_code == 201
@@ -139,5 +143,9 @@ async def test_task_schedule_routes_and_task_filtering(monkeypatch) -> None:
     assert detail_response.status_code == 200
     assert detail_response.json()["schedule_id"] == 1
     assert detail_response.json()["schedule_name"] == "主游戏每日同步"
+    assert (
+        detail_response.json()["game_name"] is None
+        or isinstance(detail_response.json()["game_name"], str)
+    )
     assert "logs" in detail_response.json()
     assert delete_response.status_code == 204

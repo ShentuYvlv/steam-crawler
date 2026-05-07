@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.core.database import AsyncSessionLocal, get_session
+from app.core.error_utils import format_exception_details, format_exception_message
 from app.core.security import RequireOperator
 from app.models import SyncJob, TaskLog, TaskSchedule
 from app.schemas import (
@@ -130,13 +131,13 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
             task = await session.get(SyncJob, sync_job_id)
             if task is not None:
                 task.status = "failed"
-                task.error_message = str(exc)
+                task.error_message = format_exception_message(exc)
                 await add_task_log(
                     session,
                     sync_job_id,
                     "任务执行失败",
                     level="error",
-                    details={"error": str(exc)},
+                    details=format_exception_details(exc),
                 )
                 await session.commit()
             return

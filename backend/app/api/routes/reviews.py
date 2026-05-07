@@ -6,6 +6,7 @@ from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal, get_session
+from app.core.error_utils import format_exception_details
 from app.core.security import RequireOperator
 from app.models import ReplyDraft, SteamReview, SyncJob
 from app.schemas import (
@@ -332,13 +333,14 @@ async def _generate_reply_drafts_in_background(task_id: int, review_ids: list[in
                 await service.generate_for_review(review_id)
                 inserted += 1
                 await add_task_log(session, task_id, f"评论 {review_id} 草稿生成成功")
-            except ReplyGenerationError:
+            except ReplyGenerationError as exc:
                 skipped += 1
                 await add_task_log(
                     session,
                     task_id,
                     f"评论 {review_id} 草稿生成失败",
                     level="error",
+                    details=format_exception_details(exc),
                 )
                 continue
         task.inserted_count = inserted
@@ -377,13 +379,14 @@ async def _send_replies_in_background(
                 )
                 inserted += 1
                 await add_task_log(session, task_id, f"评论 {review_id} 回复发送成功")
-            except DeveloperReplyError:
+            except DeveloperReplyError as exc:
                 skipped += 1
                 await add_task_log(
                     session,
                     task_id,
                     f"评论 {review_id} 回复发送失败",
                     level="error",
+                    details=format_exception_details(exc),
                 )
                 continue
         task.inserted_count = inserted

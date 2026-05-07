@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
-from app.models import Base, SteamReview, SyncJob
+from app.models import Base, SteamReview, SyncJob, TaskLog
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -55,6 +55,14 @@ class FakeCommentScraper:
 
     async def close(self) -> None:
         self.closed = True
+
+
+class EmptyMessageScraper:
+    async def scrape_app_comments(self, **kwargs):
+        raise RuntimeError()
+
+    async def close(self) -> None:
+        return None
 
 
 async def test_review_sync_service_upserts_reviews_and_records_job() -> None:
@@ -112,3 +120,33 @@ async def test_review_sync_service_uses_latest_local_review_timestamp() -> None:
     assert scraper.kwargs is not None
     assert scraper.kwargs["limit"] is None
     assert scraper.kwargs["since_timestamp"] == 1777250000
+
+
+async def test_review_sync_service_records_non_empty_failure_message_and_traceback() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        service = SteamReviewSyncService(session, scraper_factory=EmptyMessageScraper)
+
+        try:
+            await service.sync_reviews(ReviewSyncOptions(app_id=3350200))
+        except RuntimeError:
+            pass
+        else:
+            raise AssertionError("Expected RuntimeError to be raised")
+
+        job = (await session.execute(select(SyncJob))).scalar_one()
+        logs = (await session.execute(select(TaskLog).order_by(TaskLog.id))).scalars().all()
+
+    await engine.dispose()
+
+    assert job.status == "failed"
+    assert job.error_message == "RuntimeError"
+    assert logs[-1].level == "error"
+    assert logs[-1].details is not None
+    assert logs[-1].details["error"] == "RuntimeError"
+    assert logs[-1].details["exception_type"] == "RuntimeError"
+    assert "RuntimeError" in logs[-1].details["traceback"]

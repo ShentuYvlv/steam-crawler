@@ -8,6 +8,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_utils import format_exception_message
 from app.models import SyncJob
 from app.repositories import SteamReviewRepository
 
@@ -120,7 +121,7 @@ async def import_stock_reviews(
             sync_job.inserted_count = inserted
             sync_job.updated_count = updated
             sync_job.skipped_count = skipped
-            sync_job.error_message = str(exc)
+            sync_job.error_message = format_exception_message(exc)
             sync_job.finished_at = datetime.now(tz=CHINA_TZ)
             await session.commit()
         raise

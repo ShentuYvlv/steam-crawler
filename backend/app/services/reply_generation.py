@@ -8,6 +8,7 @@ from typing import Protocol
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_utils import format_exception_message
 from app.models import ReplyDraft, ReplyStrategy, SteamReview
 from app.services.aliyun_client import AliyunChatClient, AliyunChatOptions
 
@@ -53,7 +54,7 @@ class ReplyGenerationService:
             content = await self.ai_client_factory().generate_reply(prompt, options)
         except Exception as exc:
             draft = await self._record_failed_draft(review, strategy, prompt, model_name, exc)
-            raise ReplyGenerationError(str(exc), draft.id) from exc
+            raise ReplyGenerationError(format_exception_message(exc), draft.id) from exc
 
         draft = ReplyDraft(
             review_id=review.id,
@@ -87,6 +88,7 @@ class ReplyGenerationService:
         model_name: str,
         exc: Exception,
     ) -> ReplyDraft:
+        message = format_exception_message(exc)
         draft = ReplyDraft(
             review_id=review.id,
             strategy_id=strategy.id,
@@ -95,7 +97,7 @@ class ReplyGenerationService:
             status="generation_failed",
             model_name=model_name,
             prompt_snapshot=prompt,
-            error_message=str(exc),
+            error_message=message,
         )
         review.reply_status = "generation_failed"
         self.session.add(draft)

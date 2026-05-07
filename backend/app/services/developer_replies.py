@@ -11,6 +11,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
+from app.core.error_utils import format_exception_message
 from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamReview
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
@@ -109,13 +110,14 @@ class DeveloperReplyService:
             await self.session.refresh(record)
             return record
         except Exception as exc:
+            message = format_exception_message(exc)
             record.status = "failed"
-            record.error_message = str(exc)
+            record.error_message = message
             review.reply_status = "send_failed"
             if draft is not None:
                 draft.status = "send_failed"
             await self.session.commit()
-            raise DeveloperReplyError(str(exc), record.id) from exc
+            raise DeveloperReplyError(message, record.id) from exc
         finally:
             if client is not None:
                 await client.close()

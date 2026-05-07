@@ -7,6 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.error_utils import format_exception_details, format_exception_message
 from app.importers import steam_api_review_to_values
 from app.models import SteamReview, SyncJob
 from app.repositories import SteamReviewRepository
@@ -158,14 +159,14 @@ class SteamReviewSyncService:
             sync_job.inserted_count = inserted
             sync_job.updated_count = updated
             sync_job.skipped_count = skipped
-            sync_job.error_message = str(exc)
+            sync_job.error_message = format_exception_message(exc)
             sync_job.finished_at = datetime.now(tz=CHINA_TZ)
             await add_task_log(
                 self.session,
                 sync_job.id,
                 "评论同步失败",
                 level="error",
-                details={"error": str(exc)},
+                details=format_exception_details(exc),
             )
             await self.session.commit()
             raise

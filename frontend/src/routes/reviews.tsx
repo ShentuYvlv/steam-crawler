@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import {
   bulkGenerateReplyDrafts,
   bulkUpdateReviewStatus,
+  fetchGames,
   fetchReviewDetail,
   fetchReviewReplyDrafts,
   fetchReviews,
@@ -28,14 +29,17 @@ import {
   sendReviewReply,
   updateReplyDraft,
   updateReviewStatus,
+  type GameListItem,
   type ReviewDetail,
   type ReviewListItem,
   type ReviewQuery
 } from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
+const selectedReviewGameKey = "steam_reviews_selected_app_id";
+
 const defaultFilters: ReviewQuery = {
-  app_id: "3350200",
+  app_id: "",
   voted_up: "",
   min_votes_up: "",
   max_votes_up: "",
@@ -64,13 +68,21 @@ const replyStatusText: Record<string, string> = {
 
 function ReviewsPage() {
   const queryClient = useQueryClient();
-  const [filters, setFilters] = useState<ReviewQuery>(defaultFilters);
+  const [filters, setFilters] = useState<ReviewQuery>(() => ({
+    ...defaultFilters,
+    app_id: getInitialSelectedGameId()
+  }));
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [activeReviewId, setActiveReviewId] = useState<number | null>(null);
   const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const gamesQuery = useQuery({
+    queryKey: ["games"],
+    queryFn: fetchGames
+  });
   const reviewsQuery = useQuery({
     queryKey: ["reviews", filters],
-    queryFn: () => fetchReviews(filters)
+    queryFn: () => fetchReviews(filters),
+    enabled: !!filters.app_id
   });
   const detailQuery = useQuery({
     queryKey: ["review", activeReviewId],
@@ -123,16 +135,45 @@ function ReviewsPage() {
   }, [filters.page_size, reviewsQuery.data?.total]);
 
   const items = reviewsQuery.data?.items ?? [];
-  const activeFilters = getActiveFilters(filters);
+  const activeFilters = getActiveFilters(filters, gamesQuery.data ?? []);
   const allCurrentPageSelected =
     items.length > 0 && items.every((item) => selectedIds.includes(item.id));
+
+  useEffect(() => {
+    if ((gamesQuery.data?.length ?? 0) === 0) {
+      return;
+    }
+    const selectedAppId = filters.app_id;
+    const hasSelectedGame = !!selectedAppId && gamesQuery.data?.some((game) => String(game.app_id) === selectedAppId);
+    if (!hasSelectedGame) {
+      setFilters((current) => ({
+        ...current,
+        app_id: String(gamesQuery.data?.[0]?.app_id ?? "")
+      }));
+    }
+  }, [filters.app_id, gamesQuery.data]);
+
+  useEffect(() => {
+    if (!filters.app_id) {
+      return;
+    }
+    window.localStorage.setItem(selectedReviewGameKey, filters.app_id);
+    const url = new URL(window.location.href);
+    url.searchParams.set("app_id", filters.app_id);
+    window.history.replaceState({}, "", url);
+  }, [filters.app_id]);
+
+  useEffect(() => {
+    setSelectedIds([]);
+    setActiveReviewId(null);
+  }, [filters.app_id]);
 
   function updateFilter(key: keyof ReviewQuery, value: string | number) {
     setFilters((current) => ({ ...current, [key]: value, page: 1 }));
   }
 
   function resetFilters() {
-    setFilters(defaultFilters);
+    setFilters({ ...defaultFilters, app_id: filters.app_id });
     setSelectedIds([]);
   }
 
@@ -198,8 +239,8 @@ function ReviewsPage() {
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
-          <FilterInput
-            label="App ID"
+          <GameSwitchField
+            games={gamesQuery.data ?? []}
             value={filters.app_id}
             onChange={(value) => updateFilter("app_id", value)}
           />
@@ -1030,9 +1071,36 @@ function FilterSelect({
   );
 }
 
-function getActiveFilters(filters: ReviewQuery) {
+function GameSwitchField({
+  games,
+  value,
+  onChange
+}: {
+  games: GameListItem[];
+  value: string | number | undefined;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label className="flex flex-col gap-2 text-sm sm:col-span-2 xl:col-span-2">
+      <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">游戏切换</span>
+      <select className="form-input" value={value ?? ""} onChange={(event) => onChange(event.target.value)}>
+        {games.length === 0 ? <option value="">暂无可切换游戏</option> : null}
+        {games.map((game) => (
+          <option key={game.app_id} value={game.app_id}>
+            {(game.name || `App ${game.app_id}`) + ` · ${game.review_count} 条`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function getActiveFilters(filters: ReviewQuery, games: GameListItem[]) {
   const chips: string[] = [];
-  if (filters.app_id) chips.push(`App ${filters.app_id}`);
+  if (filters.app_id) {
+    const selectedGame = games.find((game) => String(game.app_id) === filters.app_id);
+    chips.push(selectedGame?.name ? `${selectedGame.name} · App ${filters.app_id}` : `App ${filters.app_id}`);
+  }
   if (filters.voted_up === "true") chips.push("好评");
   if (filters.voted_up === "false") chips.push("差评");
   if (filters.min_votes_up) chips.push(`点赞 ≥ ${filters.min_votes_up}`);
@@ -1055,6 +1123,17 @@ function formatDate(value: string | null) {
     dateStyle: "short",
     timeStyle: "short"
   }).format(new Date(value));
+}
+
+function getInitialSelectedGameId() {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const urlAppId = new URLSearchParams(window.location.search).get("app_id");
+  if (urlAppId) {
+    return urlAppId;
+  }
+  return window.localStorage.getItem(selectedReviewGameKey) ?? "";
 }
 
 export const reviewsRoute = createRoute({

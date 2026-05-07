@@ -5,6 +5,7 @@ from app.schemas.auth import (
     UserResponse,
     UserUpdate,
 )
+from app.schemas.games import GameListItem
 from app.schemas.reply_drafts import (
     BulkGenerateReplyRequest,
     BulkGenerateReplyResponse,
@@ -44,7 +45,7 @@ from app.schemas.reviews import (
     ReviewStatusUpdateResponse,
 )
 from app.schemas.stats import StatsOverviewResponse, StatsTimeseriesItem, StatsTimeseriesResponse
-from app.schemas.tasks import TaskScheduleResponse, TaskScheduleUpdate
+from app.schemas.tasks import TaskScheduleCreate, TaskScheduleResponse, TaskScheduleUpdate
 
 __all__ = [
     "BulkReviewStatusUpdateRequest",
@@ -54,6 +55,7 @@ __all__ = [
     "BulkSendReplyResponse",
     "DeleteRequestCreate",
     "GenerateReplyResponse",
+    "GameListItem",
     "LoginRequest",
     "LoginResponse",
     "ReviewDetailResponse",
@@ -80,6 +82,7 @@ __all__ = [
     "SyncJobListItem",
     "SyncJobWithLogsResponse",
     "TaskLogResponse",
+    "TaskScheduleCreate",
     "TaskScheduleResponse",
     "TaskScheduleUpdate",
     "UserCreate",

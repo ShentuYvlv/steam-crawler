@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 
 class ReviewSyncRequest(BaseModel):
     app_id: int = Field(gt=0)
+    schedule_id: int | None = Field(default=None, gt=0)
     limit: int | None = Field(default=None, gt=0, le=10000)
     language: str = "schinese"
     filter: str = "recent"
@@ -27,6 +28,9 @@ class ReviewSyncResponse(BaseModel):
 
 class SyncJobListItem(BaseModel):
     id: int
+    schedule_id: int | None
+    schedule_name: str | None
+    trigger_type: str
     app_id: int | None
     job_type: str
     source_type: str

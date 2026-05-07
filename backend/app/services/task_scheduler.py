@@ -67,10 +67,13 @@ class TaskScheduler:
                     continue
                 if not await self._is_due(session, schedule, now):
                     continue
-                if await self._has_running_job(session, schedule.app_id):
+                if await self._has_running_job(session, schedule.id):
                     continue
 
                 sync_job = SyncJob(
+                    schedule_id=schedule.id,
+                    schedule_name=schedule.name,
+                    trigger_type="scheduled",
                     app_id=schedule.app_id,
                     job_type="steam_review_sync",
                     source_type="steam_api",
@@ -85,6 +88,9 @@ class TaskScheduler:
                 await service.sync_reviews(
                     ReviewSyncOptions(
                         app_id=schedule.app_id,
+                        schedule_id=schedule.id,
+                        schedule_name=schedule.name,
+                        trigger_type="scheduled",
                         limit=None,
                         language=str((schedule.options or {}).get("language") or "schinese"),
                         filter=str((schedule.options or {}).get("filter") or "recent"),
@@ -98,11 +104,11 @@ class TaskScheduler:
                     )
                 )
 
-    async def _has_running_job(self, session, app_id: int) -> bool:
+    async def _has_running_job(self, session, schedule_id: int) -> bool:
         result = await session.execute(
             select(SyncJob.id)
             .where(
-                SyncJob.app_id == app_id,
+                SyncJob.schedule_id == schedule_id,
                 SyncJob.job_type == "steam_review_sync",
                 SyncJob.status.in_(("pending", "running")),
             )
@@ -117,9 +123,9 @@ class TaskScheduler:
         result = await session.execute(
             select(SyncJob)
             .where(
-                SyncJob.app_id == schedule.app_id,
+                SyncJob.schedule_id == schedule.id,
                 SyncJob.job_type == "steam_review_sync",
-                SyncJob.status.in_(("success", "failed")),
+                SyncJob.status.in_(("success", "failed", "partial_success")),
             )
             .order_by(desc(SyncJob.started_at), desc(SyncJob.created_at), desc(SyncJob.id))
             .limit(1)
@@ -129,16 +135,8 @@ class TaskScheduler:
             last_job.started_at if last_job and last_job.started_at else None
         )
 
-        minute = schedule.minute if schedule.minute is not None else 0
         hour = schedule.hour if schedule.hour is not None else 0
-
-        if schedule.interval == "hourly":
-            due_time = now.replace(minute=minute, second=0, microsecond=0)
-            if now < due_time:
-                due_time -= timedelta(hours=1)
-            return last_run_at is None or last_run_at < due_time
-
-        due_time = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        due_time = now.replace(hour=hour, minute=0, second=0, microsecond=0)
         if now < due_time:
             due_time -= timedelta(days=1)
         return last_run_at is None or last_run_at < due_time

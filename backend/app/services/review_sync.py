@@ -38,6 +38,9 @@ class CommentScraperProtocol(Protocol):
 @dataclass(frozen=True)
 class ReviewSyncOptions:
     app_id: int
+    schedule_id: int | None = None
+    schedule_name: str | None = None
+    trigger_type: str = "manual"
     limit: int | None = None
     language: str = "schinese"
     filter: str = "recent"
@@ -78,6 +81,9 @@ class SteamReviewSyncService:
             sync_job.started_at = datetime.now(tz=CHINA_TZ)
         else:
             sync_job = SyncJob(
+                schedule_id=options.schedule_id,
+                schedule_name=options.schedule_name,
+                trigger_type=options.trigger_type,
                 app_id=options.app_id,
                 job_type="steam_review_sync",
                 source_type="steam_api",

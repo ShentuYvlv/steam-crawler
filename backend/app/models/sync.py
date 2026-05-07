@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from datetime import datetime
 
 from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text
@@ -11,6 +13,12 @@ class SyncJob(TimestampMixin, Base):
     __tablename__ = "sync_jobs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    schedule_id: Mapped[int | None] = mapped_column(
+        ForeignKey("task_schedules.id", ondelete="SET NULL"),
+        index=True,
+    )
+    schedule_name: Mapped[str | None] = mapped_column(String(255))
+    trigger_type: Mapped[str] = mapped_column(String(30), default="manual", nullable=False)
     app_id: Mapped[int | None] = mapped_column(Integer, index=True)
     job_type: Mapped[str] = mapped_column(String(50), nullable=False)
     source_type: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -22,24 +30,27 @@ class SyncJob(TimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    logs: Mapped[list["TaskLog"]] = relationship(
+    logs: Mapped[list[TaskLog]] = relationship(
         back_populates="task",
         cascade="all, delete-orphan",
         order_by="TaskLog.created_at",
     )
+    schedule: Mapped[TaskSchedule | None] = relationship(back_populates="jobs")
 
 
 class TaskSchedule(TimestampMixin, Base):
     __tablename__ = "task_schedules"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    task_type: Mapped[str] = mapped_column(String(80), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    task_type: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
     is_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     app_id: Mapped[int | None] = mapped_column(Integer)
-    interval: Mapped[str] = mapped_column(String(50), default="hourly", nullable=False)
+    interval: Mapped[str] = mapped_column(String(50), default="daily", nullable=False)
     hour: Mapped[int | None] = mapped_column(Integer)
     minute: Mapped[int | None] = mapped_column(Integer)
     options: Mapped[dict | None] = mapped_column(JSON)
+    jobs: Mapped[list[SyncJob]] = relationship(back_populates="schedule")
 
 
 class TaskLog(TimestampMixin, Base):

@@ -23,6 +23,12 @@ export type User = {
   updated_at: string;
 };
 
+export type GameListItem = {
+  app_id: number;
+  name: string | null;
+  review_count: number;
+};
+
 export type LoginResponse = {
   access_token: string;
   token_type: string;
@@ -168,6 +174,9 @@ export type ReplyRecord = {
 
 export type SyncJob = {
   id: number;
+  schedule_id: number | null;
+  schedule_name: string | null;
+  trigger_type: string;
   app_id: number | null;
   job_type: string;
   source_type: string;
@@ -198,6 +207,7 @@ export type SyncJobDetail = SyncJob & {
 
 export type TaskSchedule = {
   id: number;
+  name: string;
   task_type: string;
   is_enabled: boolean;
   app_id: number | null;
@@ -279,6 +289,10 @@ export async function fetchStatsOverview(): Promise<StatsOverview> {
 
 export async function fetchStatsTimeseries(days = 14): Promise<StatsTimeseries> {
   return apiGet<StatsTimeseries>(`/stats/timeseries?days=${days}`);
+}
+
+export async function fetchGames(): Promise<GameListItem[]> {
+  return apiGet<GameListItem[]>("/games");
 }
 
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
@@ -389,6 +403,11 @@ export async function fetchTasks(): Promise<SyncJob[]> {
   return apiGet<SyncJob[]>("/tasks");
 }
 
+export async function fetchTasksBySchedule(scheduleId?: number | null): Promise<SyncJob[]> {
+  const query = scheduleId ? `?schedule_id=${scheduleId}` : "";
+  return apiGet<SyncJob[]>(`/tasks${query}`);
+}
+
 export async function fetchTaskDetail(taskId: number): Promise<SyncJobDetail> {
   return apiGet<SyncJobDetail>(`/tasks/${taskId}`);
 }
@@ -399,6 +418,7 @@ export async function fetchTaskLogs(taskId: number): Promise<TaskLog[]> {
 
 export async function enqueueReviewSync(payload: {
   app_id: number;
+  schedule_id?: number | null;
   language?: string;
   filter?: string;
   review_type?: string;
@@ -412,21 +432,44 @@ export async function enqueueReviewSync(payload: {
   });
 }
 
-export async function fetchTaskSchedule(): Promise<TaskSchedule | null> {
-  return apiGet<TaskSchedule | null>("/tasks/schedule");
+export async function fetchTaskSchedules(): Promise<TaskSchedule[]> {
+  return apiGet<TaskSchedule[]>("/tasks/schedules");
 }
 
-export async function updateTaskSchedule(payload: {
+export async function createTaskSchedule(payload: {
+  name: string;
   is_enabled: boolean;
-  app_id?: number | null;
-  interval: string;
-  hour?: number | null;
-  minute?: number | null;
+  app_id: number;
+  interval: "daily";
+  hour: number;
   options?: Record<string, unknown>;
 }): Promise<TaskSchedule> {
-  return apiRequest<TaskSchedule>("/tasks/schedule", {
+  return apiRequest<TaskSchedule>("/tasks/schedules", {
+    method: "POST",
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateTaskSchedule(
+  scheduleId: number,
+  payload: {
+    name?: string;
+    is_enabled?: boolean;
+    app_id?: number | null;
+    interval?: "daily";
+    hour?: number | null;
+    options?: Record<string, unknown>;
+  }
+): Promise<TaskSchedule> {
+  return apiRequest<TaskSchedule>(`/tasks/schedules/${scheduleId}`, {
     method: "PATCH",
     body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteTaskSchedule(scheduleId: number): Promise<void> {
+  await apiRequest<void>(`/tasks/schedules/${scheduleId}`, {
+    method: "DELETE"
   });
 }
 
@@ -482,6 +525,10 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
     }
     const message = await response.text();
     throw new Error(message || `HTTP ${response.status}`);
+  }
+
+  if (response.status === 204) {
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;

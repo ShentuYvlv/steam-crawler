@@ -24,6 +24,7 @@ except ImportError:
     orjson = None
 
 from src.config import Config, get_config
+from src.utils.task_control import TaskCancelledError
 
 if TYPE_CHECKING:
     import requests
@@ -40,13 +41,21 @@ class AsyncHttpClient:
         _client: httpx 异步客户端实例（延迟初始化）。
     """
 
-    def __init__(self, config: Optional[Config] = None):
+    def __init__(
+        self,
+        config: Optional[Config] = None,
+        *,
+        stop_event: Any | None = None,
+        rate_limiter: Any | None = None,
+    ):
         """初始化异步 HTTP 客户端。
 
         Args:
             config: 可选的配置对象，如果不提供则使用全局配置。
         """
         self.config = config or get_config()
+        self.stop_event = stop_event
+        self.rate_limiter = rate_limiter
         # 延迟初始化客户端，因为 AsyncClient 需要在异步上下文中使用
         self._client: Optional[httpx.AsyncClient] = None
 
@@ -99,17 +108,24 @@ class AsyncHttpClient:
 
         for attempt in range(self.config.http.max_retries + 1):
             try:
+                self._raise_if_cancelled()
+                if self.rate_limiter is not None:
+                    await self.rate_limiter.before_request(self.stop_event)
                 response = await client.get(url, params=params)
                 response.raise_for_status()
+                if self.rate_limiter is not None:
+                    await self.rate_limiter.record_success()
 
                 # 请求成功后添加延迟，避免请求过快触发限流
-                if delay:
+                if delay and self.rate_limiter is None:
                     await self._delay()
 
                 return response
 
             except (httpx.HTTPStatusError, httpx.RequestError) as e:
                 last_exception = e
+                if self.rate_limiter is not None:
+                    await self.rate_limiter.record_error(e)
                 if attempt < self.config.http.max_retries:
                     # 指数退避策略：等待时间 = 2^attempt + 随机抖动
                     # 这样做可以防止所有客户端在同一时间重试（雷鸣群问题）
@@ -119,7 +135,7 @@ class AsyncHttpClient:
                         f"请求失败，{wait_time:.1f} 秒后重试 "
                         f"({attempt + 1}/{self.config.http.max_retries}): {e}"
                     )
-                    await asyncio.sleep(wait_time)
+                    await self._sleep(wait_time)
 
         raise last_exception  # type: ignore
 
@@ -159,7 +175,19 @@ class AsyncHttpClient:
             self.config.http.min_delay,
             self.config.http.max_delay,
         )
-        await asyncio.sleep(delay)
+        await self._sleep(delay)
+
+    async def _sleep(self, delay: float) -> None:
+        remaining = delay
+        while remaining > 0:
+            self._raise_if_cancelled()
+            chunk = min(0.5, remaining)
+            await asyncio.sleep(chunk)
+            remaining -= chunk
+
+    def _raise_if_cancelled(self) -> None:
+        if self.stop_event is not None and self.stop_event.is_set():
+            raise TaskCancelledError()
 
     async def close(self) -> None:
         """关闭客户端连接。

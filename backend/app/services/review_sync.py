@@ -6,12 +6,15 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.utils.steam_rate_limiter import get_steam_rate_limiter
+from src.utils.task_control import TaskCancelledError
 
 from app.core.error_utils import format_exception_details, format_exception_message
 from app.importers import steam_api_review_to_values
 from app.models import SteamReview, SyncJob
 from app.repositories import SteamReviewRepository
 from app.services.task_logs import add_task_log
+from app.services.task_runtime import finalize_cancelled_task
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -66,11 +69,14 @@ class SteamReviewSyncService:
     def __init__(
         self,
         session: AsyncSession,
-        scraper_factory: Callable[[], CommentScraperProtocol] | None = None,
+        scraper_factory: Callable[..., CommentScraperProtocol] | None = None,
+        *,
+        cancel_event=None,
     ) -> None:
         self.session = session
         self.repository = SteamReviewRepository(session)
         self.scraper_factory = scraper_factory or create_comment_scraper
+        self.cancel_event = cancel_event
 
     async def sync_reviews(self, options: ReviewSyncOptions) -> ReviewSyncResult:
         if options.sync_job_id is not None:
@@ -93,6 +99,7 @@ class SteamReviewSyncService:
             )
             self.session.add(sync_job)
         await self.session.flush()
+        await self._raise_if_cancelled(sync_job)
         await add_task_log(
             self.session,
             sync_job.id,
@@ -104,13 +111,14 @@ class SteamReviewSyncService:
         updated = 0
         skipped = 0
         query_summary: dict[str, Any] = {}
-        scraper = self.scraper_factory()
+        scraper = self._create_scraper()
         latest_review = await self.get_latest_review(options.app_id)
         latest_review_created_at = latest_review.timestamp_created if latest_review else None
         since_timestamp = datetime_to_epoch_seconds(
             latest_review_created_at,
             source_type=latest_review.source_type if latest_review else None,
         )
+        sync_mode = "incremental" if since_timestamp is not None else "initial"
         await add_task_log(
             self.session,
             sync_job.id,
@@ -122,8 +130,18 @@ class SteamReviewSyncService:
                 "since_timestamp": since_timestamp,
             },
         )
+        await add_task_log(
+            self.session,
+            sync_job.id,
+            "Steam 限流状态",
+            details={
+                "sync_mode": sync_mode,
+                **(await get_steam_rate_limiter().snapshot()),
+            },
+        )
 
         try:
+            await self._raise_if_cancelled(sync_job)
             result = await scraper.scrape_app_comments(
                 app_id=options.app_id,
                 limit=options.limit,
@@ -157,9 +175,40 @@ class SteamReviewSyncService:
                 self.session,
                 sync_job.id,
                 "评论同步完成",
-                details={"inserted": inserted, "updated": updated, "skipped": skipped},
+                details={
+                    "inserted": inserted,
+                    "updated": updated,
+                    "skipped": skipped,
+                    "sync_mode": sync_mode,
+                    **(await get_steam_rate_limiter().snapshot()),
+                },
             )
             await self.session.commit()
+        except TaskCancelledError:
+            sync_job.inserted_count = inserted
+            sync_job.updated_count = updated
+            sync_job.skipped_count = skipped
+            await finalize_cancelled_task(
+                self.session,
+                sync_job,
+                message="评论同步已取消",
+                details={
+                    "inserted": inserted,
+                    "updated": updated,
+                    "skipped": skipped,
+                    "sync_mode": sync_mode,
+                },
+            )
+            await self.session.commit()
+            return ReviewSyncResult(
+                sync_job_id=sync_job.id,
+                app_id=options.app_id,
+                inserted=inserted,
+                updated=updated,
+                skipped=skipped,
+                status=sync_job.status,
+                query_summary=query_summary,
+            )
         except Exception as exc:
             sync_job.status = "failed"
             sync_job.inserted_count = inserted
@@ -172,7 +221,11 @@ class SteamReviewSyncService:
                 sync_job.id,
                 "评论同步失败",
                 level="error",
-                details=format_exception_details(exc),
+                details={
+                    **format_exception_details(exc),
+                    "sync_mode": sync_mode,
+                    "steam_rate_limit": await get_steam_rate_limiter().snapshot(),
+                },
             )
             await self.session.commit()
             raise
@@ -201,11 +254,24 @@ class SteamReviewSyncService:
         )
         return result.scalar_one_or_none()
 
+    async def _raise_if_cancelled(self, sync_job: SyncJob) -> None:
+        if self.cancel_event is not None and self.cancel_event.is_set():
+            raise TaskCancelledError()
+        current_task = await self.session.get(SyncJob, sync_job.id)
+        if current_task is not None and current_task.status in {"cancel_requested", "cancelled"}:
+            raise TaskCancelledError()
 
-def create_comment_scraper() -> CommentScraperProtocol:
+    def _create_scraper(self) -> CommentScraperProtocol:
+        try:
+            return self.scraper_factory(self.cancel_event)
+        except TypeError:
+            return self.scraper_factory()
+
+
+def create_comment_scraper(cancel_event=None) -> CommentScraperProtocol:
     from src.scrapers.comment_scraper import CommentScraper
 
-    return CommentScraper()
+    return CommentScraper(stop_event=cancel_event)
 
 
 def datetime_to_epoch_seconds(value: datetime | None, source_type: str | None = None) -> int | None:

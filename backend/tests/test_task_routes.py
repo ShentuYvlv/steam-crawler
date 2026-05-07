@@ -149,3 +149,58 @@ async def test_task_schedule_routes_and_task_filtering(monkeypatch) -> None:
     )
     assert "logs" in detail_response.json()
     assert delete_response.status_code == 204
+
+
+async def test_cancel_task_route_marks_pending_and_running_tasks(monkeypatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        admin = User(
+            username="admin",
+            password_hash=hash_password("password123"),
+            role="admin",
+            is_active=True,
+        )
+        seed_session.add(admin)
+        seed_session.add_all(
+            [
+                SyncJob(
+                    app_id=3350200,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="pending",
+                ),
+                SyncJob(
+                    app_id=4005300,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="running",
+                ),
+            ]
+        )
+        await seed_session.commit()
+        token = create_access_token(admin)
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            headers = {"Authorization": f"Bearer {token}"}
+            pending_response = await client.post("/api/tasks/1/cancel", headers=headers)
+            running_response = await client.post("/api/tasks/2/cancel", headers=headers)
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert pending_response.status_code == 200
+    assert pending_response.json()["status"] == "cancelled"
+    assert pending_response.json()["can_cancel"] is False
+    assert running_response.status_code == 200
+    assert running_response.json()["status"] == "cancel_requested"
+    assert running_response.json()["can_cancel"] is True

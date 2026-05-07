@@ -43,6 +43,7 @@ class SyncJobListItem(BaseModel):
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime
+    can_cancel: bool = False
 
     model_config = {"from_attributes": True}
 

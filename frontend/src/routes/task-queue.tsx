@@ -1,12 +1,13 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
 import { ListOrdered } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { fetchGames, fetchTaskDetail, fetchTasksBySchedule, type SyncJob } from "@/lib/api";
+import { cancelTask, fetchGames, fetchTaskDetail, fetchTasksBySchedule, type SyncJob } from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
 function TaskQueuePage() {
+  const queryClient = useQueryClient();
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
   const tasksQuery = useQuery({
     queryKey: ["task-queue", selectedAppId ?? "all"],
@@ -41,6 +42,16 @@ function TaskQueuePage() {
     queryFn: () => fetchTaskDetail(selectedTaskId as number),
     enabled: selectedTaskId !== null,
     refetchInterval: 5000,
+  });
+  const cancelMutation = useMutation({
+    mutationFn: (taskId: number) => cancelTask(taskId),
+    onSuccess: async (_, taskId) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["task-queue"] }),
+        queryClient.invalidateQueries({ queryKey: ["task-indicator"] }),
+        queryClient.invalidateQueries({ queryKey: ["task-queue-detail", taskId] }),
+      ]);
+    },
   });
 
   return (
@@ -127,9 +138,21 @@ function TaskQueuePage() {
                     #{detailQuery.data.id} · {formatTaskType(detailQuery.data.job_type)}
                   </h2>
                 </div>
-                <span className={statusBadgeClass(detailQuery.data.status)}>
-                  {formatTaskStatus(detailQuery.data.status)}
-                </span>
+                <div className="flex items-center gap-3">
+                  {detailQuery.data.can_cancel ? (
+                    <button
+                      type="button"
+                      className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={cancelMutation.isPending}
+                      onClick={() => cancelMutation.mutate(detailQuery.data!.id)}
+                    >
+                      {cancelMutation.isPending ? "取消中..." : "取消任务"}
+                    </button>
+                  ) : null}
+                  <span className={statusBadgeClass(detailQuery.data.status)}>
+                    {formatTaskStatus(detailQuery.data.status)}
+                  </span>
+                </div>
               </div>
 
               <div className="mt-5 grid gap-3 md:grid-cols-3">
@@ -209,6 +232,8 @@ function formatTaskStatus(value: string) {
   const mapping: Record<string, string> = {
     pending: "排队中",
     running: "执行中",
+    cancel_requested: "取消中",
+    cancelled: "已取消",
     success: "成功",
     partial_success: "部分成功",
     failed: "失败",
@@ -219,6 +244,12 @@ function formatTaskStatus(value: string) {
 function statusBadgeClass(status: string) {
   if (status === "failed") {
     return "badge-red";
+  }
+  if (status === "cancel_requested") {
+    return "badge-orange";
+  }
+  if (status === "cancelled") {
+    return "rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600";
   }
   if (status === "success") {
     return "badge-green";

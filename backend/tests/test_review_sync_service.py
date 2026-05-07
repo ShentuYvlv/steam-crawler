@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from src.utils.task_control import TaskCancelledError
 
 from app.models import Base, SteamReview, SyncJob, TaskLog
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
@@ -60,6 +61,14 @@ class FakeCommentScraper:
 class EmptyMessageScraper:
     async def scrape_app_comments(self, **kwargs):
         raise RuntimeError()
+
+    async def close(self) -> None:
+        return None
+
+
+class CancelledScraper:
+    async def scrape_app_comments(self, **kwargs):
+        raise TaskCancelledError()
 
     async def close(self) -> None:
         return None
@@ -150,3 +159,23 @@ async def test_review_sync_service_records_non_empty_failure_message_and_traceba
     assert logs[-1].details["error"] == "RuntimeError"
     assert logs[-1].details["exception_type"] == "RuntimeError"
     assert "RuntimeError" in logs[-1].details["traceback"]
+
+
+async def test_review_sync_service_marks_task_cancelled() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        service = SteamReviewSyncService(session, scraper_factory=lambda _: CancelledScraper())
+        result = await service.sync_reviews(ReviewSyncOptions(app_id=3350200))
+
+        job = (await session.execute(select(SyncJob))).scalar_one()
+        logs = (await session.execute(select(TaskLog).order_by(TaskLog.id))).scalars().all()
+
+    await engine.dispose()
+
+    assert result.status == "cancelled"
+    assert job.status == "cancelled"
+    assert logs[-1].message == "评论同步已取消"

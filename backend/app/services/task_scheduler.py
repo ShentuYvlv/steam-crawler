@@ -9,6 +9,7 @@ from sqlalchemy import desc, select
 from app.core.database import AsyncSessionLocal
 from app.models import SyncJob, TaskSchedule
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
+from app.services.task_runtime import register_cancel_event, unregister_cancel_event
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -84,25 +85,31 @@ class TaskScheduler:
                 await session.commit()
                 await session.refresh(sync_job)
 
-                service = SteamReviewSyncService(session)
-                await service.sync_reviews(
-                    ReviewSyncOptions(
-                        app_id=schedule.app_id,
-                        schedule_id=schedule.id,
-                        schedule_name=schedule.name,
-                        trigger_type="scheduled",
-                        limit=None,
-                        language=str((schedule.options or {}).get("language") or "schinese"),
-                        filter=str((schedule.options or {}).get("filter") or "recent"),
-                        review_type=str((schedule.options or {}).get("review_type") or "all"),
-                        purchase_type=str((schedule.options or {}).get("purchase_type") or "all"),
-                        use_review_quality=bool(
-                            (schedule.options or {}).get("use_review_quality", True)
-                        ),
-                        per_page=int((schedule.options or {}).get("per_page") or 100),
-                        sync_job_id=sync_job.id,
+                cancel_event = register_cancel_event(sync_job.id)
+                try:
+                    service = SteamReviewSyncService(session, cancel_event=cancel_event)
+                    await service.sync_reviews(
+                        ReviewSyncOptions(
+                            app_id=schedule.app_id,
+                            schedule_id=schedule.id,
+                            schedule_name=schedule.name,
+                            trigger_type="scheduled",
+                            limit=None,
+                            language=str((schedule.options or {}).get("language") or "schinese"),
+                            filter=str((schedule.options or {}).get("filter") or "recent"),
+                            review_type=str((schedule.options or {}).get("review_type") or "all"),
+                            purchase_type=str(
+                                (schedule.options or {}).get("purchase_type") or "all"
+                            ),
+                            use_review_quality=bool(
+                                (schedule.options or {}).get("use_review_quality", True)
+                            ),
+                            per_page=int((schedule.options or {}).get("per_page") or 100),
+                            sync_job_id=sync_job.id,
+                        )
                     )
-                )
+                finally:
+                    unregister_cancel_event(sync_job.id)
 
     async def _has_running_job(self, session, schedule_id: int) -> bool:
         result = await session.execute(
@@ -110,7 +117,7 @@ class TaskScheduler:
             .where(
                 SyncJob.schedule_id == schedule_id,
                 SyncJob.job_type == "steam_review_sync",
-                SyncJob.status.in_(("pending", "running")),
+                SyncJob.status.in_(("pending", "running", "cancel_requested")),
             )
             .limit(1)
         )
@@ -125,7 +132,7 @@ class TaskScheduler:
             .where(
                 SyncJob.schedule_id == schedule.id,
                 SyncJob.job_type == "steam_review_sync",
-                SyncJob.status.in_(("success", "failed", "partial_success")),
+                SyncJob.status.in_(("success", "failed", "partial_success", "cancelled")),
             )
             .order_by(desc(SyncJob.started_at), desc(SyncJob.created_at), desc(SyncJob.id))
             .limit(1)

@@ -10,6 +10,8 @@ import threading
 from typing import TYPE_CHECKING, Any, Optional
 
 from src.config import Config, get_config
+from src.utils.steam_rate_limiter import get_steam_rate_limiter
+from src.utils.task_control import TaskCancelledError
 from src.utils.http_client import AsyncHttpClient
 
 if TYPE_CHECKING:
@@ -30,7 +32,11 @@ class CommentScraper:
         stop_event: Optional[threading.Event] = None,
     ):
         self.config = config or get_config()
-        self.client = AsyncHttpClient(self.config)
+        self.client = AsyncHttpClient(
+            self.config,
+            stop_event=stop_event,
+            rate_limiter=get_steam_rate_limiter(),
+        )
         self.ui = ui_manager
         self.stop_event = stop_event
 
@@ -84,7 +90,7 @@ class CommentScraper:
 
         while True:
             if self.stop_event and self.stop_event.is_set():
-                break
+                raise TaskCancelledError()
 
             params = self._build_params(
                 cursor=cursor,

@@ -21,6 +21,13 @@ from app.schemas import (
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 from app.services.review_sync_queue import enqueue_review_sync_job
 from app.services.task_logs import add_task_log
+from app.services.task_runtime import (
+    finalize_cancelled_task,
+    is_task_cancellable,
+    register_cancel_event,
+    request_task_cancel,
+    unregister_cancel_event,
+)
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
@@ -48,6 +55,7 @@ async def list_tasks(
     for job, game_name in result.all():
         payload = SyncJobListItem.model_validate(job).model_dump()
         payload["game_name"] = game_name
+        payload["can_cancel"] = is_task_cancellable(job.status)
         items.append(payload)
     return items
 
@@ -171,6 +179,7 @@ async def get_task_detail(task_id: int, session: SessionDependency) -> SyncJobWi
     task, game_name = row
     payload = SyncJobWithLogsResponse.model_validate(task).model_dump()
     payload["game_name"] = game_name
+    payload["can_cancel"] = is_task_cancellable(task.status)
     return payload
 
 
@@ -182,41 +191,100 @@ async def get_task_logs(task_id: int, session: SessionDependency) -> list[TaskLo
     return list(result.scalars().all())
 
 
-async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> None:
-    async with AsyncSessionLocal() as session:
-        service = SteamReviewSyncService(session)
-        try:
-            schedule_name: str | None = None
-            if request.schedule_id is not None:
-                schedule = await session.get(TaskSchedule, request.schedule_id)
-                schedule_name = schedule.name if schedule is not None else None
+@router.post("/{task_id}/cancel", response_model=SyncJobListItem)
+async def cancel_task(
+    task_id: int,
+    session: SessionDependency,
+    current_user: RequireOperator,
+) -> SyncJobListItem:
+    result = await session.execute(
+        select(SyncJob, SteamGame.name)
+        .outerjoin(SteamGame, SteamGame.app_id == SyncJob.app_id)
+        .where(SyncJob.id == task_id)
+    )
+    row = result.one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task, game_name = row
+    if not is_task_cancellable(task.status):
+        raise HTTPException(status_code=409, detail="Task can no longer be cancelled")
 
-            await service.sync_reviews(
-                ReviewSyncOptions(
-                    app_id=request.app_id,
-                    schedule_id=request.schedule_id,
-                    schedule_name=schedule_name,
-                    trigger_type="manual",
-                    limit=request.limit,
-                    language=request.language,
-                    filter=request.filter,
-                    review_type=request.review_type,
-                    purchase_type=request.purchase_type,
-                    use_review_quality=request.use_review_quality,
-                    per_page=request.per_page,
-                    sync_job_id=sync_job_id,
-                )
-            )
-        except Exception as exc:
+    if task.status == "pending":
+        await finalize_cancelled_task(
+            session,
+            task,
+            message="任务已取消",
+            details={"reason": "cancelled_before_start"},
+        )
+    elif task.status != "cancel_requested":
+        task.status = "cancel_requested"
+        await add_task_log(
+            session,
+            task.id,
+            "收到取消请求",
+            details={"status": "cancel_requested"},
+        )
+    request_task_cancel(task.id)
+    await session.commit()
+    payload = SyncJobListItem.model_validate(task).model_dump()
+    payload["game_name"] = game_name
+    payload["can_cancel"] = is_task_cancellable(task.status)
+    return payload
+
+
+async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> None:
+    cancel_event = register_cancel_event(sync_job_id)
+    try:
+        async with AsyncSessionLocal() as session:
             task = await session.get(SyncJob, sync_job_id)
-            if task is not None:
-                task.status = "failed"
-                task.error_message = format_exception_message(exc)
-                await add_task_log(
+            if task is None:
+                return
+            if task.status == "cancelled":
+                return
+            if task.status == "cancel_requested":
+                await finalize_cancelled_task(
                     session,
-                    sync_job_id,
-                    "任务执行失败",
-                    level="error",
-                    details=format_exception_details(exc),
+                    task,
+                    message="任务在启动前已取消",
+                    details={"reason": "cancel_requested_before_start"},
                 )
                 await session.commit()
+                return
+            service = SteamReviewSyncService(session, cancel_event=cancel_event)
+            try:
+                schedule_name: str | None = None
+                if request.schedule_id is not None:
+                    schedule = await session.get(TaskSchedule, request.schedule_id)
+                    schedule_name = schedule.name if schedule is not None else None
+
+                await service.sync_reviews(
+                    ReviewSyncOptions(
+                        app_id=request.app_id,
+                        schedule_id=request.schedule_id,
+                        schedule_name=schedule_name,
+                        trigger_type="manual",
+                        limit=request.limit,
+                        language=request.language,
+                        filter=request.filter,
+                        review_type=request.review_type,
+                        purchase_type=request.purchase_type,
+                        use_review_quality=request.use_review_quality,
+                        per_page=request.per_page,
+                        sync_job_id=sync_job_id,
+                    )
+                )
+            except Exception as exc:
+                task = await session.get(SyncJob, sync_job_id)
+                if task is not None and task.status not in {"cancelled", "failed"}:
+                    task.status = "failed"
+                    task.error_message = format_exception_message(exc)
+                    await add_task_log(
+                        session,
+                        sync_job_id,
+                        "任务执行失败",
+                        level="error",
+                        details=format_exception_details(exc),
+                    )
+                    await session.commit()
+    finally:
+        unregister_cancel_event(sync_job_id)

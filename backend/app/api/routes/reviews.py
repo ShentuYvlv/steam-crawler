@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.utils.task_control import TaskCancelledError
 
 from app.core.database import AsyncSessionLocal, get_session
 from app.core.error_utils import format_exception_details
@@ -32,6 +33,11 @@ from app.services.developer_replies import DeveloperReplyError, DeveloperReplySe
 from app.services.reply_generation import ReplyGenerationError, ReplyGenerationService
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 from app.services.task_logs import add_task_log
+from app.services.task_runtime import (
+    finalize_cancelled_task,
+    register_cancel_event,
+    unregister_cancel_event,
+)
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
@@ -317,89 +323,155 @@ async def update_review_status(
 
 
 async def _generate_reply_drafts_in_background(task_id: int, review_ids: list[int]) -> None:
-    async with AsyncSessionLocal() as session:
-        task = await session.get(SyncJob, task_id)
-        if task is None:
-            return
-        task.status = "running"
-        task.started_at = datetime.now()
-        await add_task_log(session, task_id, "批量草稿生成开始", details={"review_ids": review_ids})
-        await session.commit()
-        service = ReplyGenerationService(session)
-        inserted = 0
-        skipped = 0
-        for review_id in review_ids:
+    cancel_event = register_cancel_event(task_id)
+    try:
+        async with AsyncSessionLocal() as session:
+            task = await session.get(SyncJob, task_id)
+            if task is None:
+                return
+            if task.status == "cancelled":
+                return
+            if task.status == "cancel_requested":
+                await finalize_cancelled_task(
+                    session,
+                    task,
+                    message="任务在启动前已取消",
+                    details={"reason": "cancel_requested_before_start"},
+                )
+                await session.commit()
+                return
+            task.status = "running"
+            task.started_at = datetime.now()
+            await add_task_log(
+                session,
+                task_id,
+                "批量草稿生成开始",
+                details={"review_ids": review_ids},
+            )
+            await session.commit()
+            service = ReplyGenerationService(session)
+            inserted = 0
+            skipped = 0
             try:
-                await service.generate_for_review(review_id)
-                inserted += 1
-                await add_task_log(session, task_id, f"评论 {review_id} 草稿生成成功")
-            except ReplyGenerationError as exc:
-                skipped += 1
+                for review_id in review_ids:
+                    if cancel_event.is_set():
+                        raise TaskCancelledError()
+                    try:
+                        await service.generate_for_review(review_id)
+                        inserted += 1
+                        await add_task_log(session, task_id, f"评论 {review_id} 草稿生成成功")
+                    except ReplyGenerationError as exc:
+                        skipped += 1
+                        await add_task_log(
+                            session,
+                            task_id,
+                            f"评论 {review_id} 草稿生成失败",
+                            level="error",
+                            details=format_exception_details(exc),
+                        )
+                        continue
+                task.inserted_count = inserted
+                task.skipped_count = skipped
+                task.status = "success" if skipped == 0 else "partial_success"
+                task.finished_at = datetime.now()
                 await add_task_log(
                     session,
                     task_id,
-                    f"评论 {review_id} 草稿生成失败",
-                    level="error",
-                    details=format_exception_details(exc),
+                    "批量草稿生成完成",
+                    details={"success": inserted, "failed": skipped},
                 )
-                continue
-        task.inserted_count = inserted
-        task.skipped_count = skipped
-        task.status = "success" if skipped == 0 else "partial_success"
-        task.finished_at = datetime.now()
-        await add_task_log(
-            session,
-            task_id,
-            "批量草稿生成完成",
-            details={"success": inserted, "failed": skipped},
-        )
-        await session.commit()
+                await session.commit()
+            except TaskCancelledError:
+                task.inserted_count = inserted
+                task.skipped_count = skipped
+                await finalize_cancelled_task(
+                    session,
+                    task,
+                    message="批量草稿生成已取消",
+                    details={"success": inserted, "failed": skipped},
+                )
+                await session.commit()
+    finally:
+        unregister_cancel_event(task_id)
 
 
 async def _send_replies_in_background(
     task_id: int, review_ids: list[int], sent_by_user_id: int | None
 ) -> None:
-    async with AsyncSessionLocal() as session:
-        task = await session.get(SyncJob, task_id)
-        if task is None:
-            return
-        task.status = "running"
-        task.started_at = datetime.now()
-        await add_task_log(session, task_id, "批量发送回复开始", details={"review_ids": review_ids})
-        await session.commit()
-        service = DeveloperReplyService(session)
-        inserted = 0
-        skipped = 0
-        for review_id in review_ids:
-            try:
-                await service.send_reply(
-                    review_id,
-                    confirmed=True,
-                    sent_by_user_id=sent_by_user_id,
+    cancel_event = register_cancel_event(task_id)
+    try:
+        async with AsyncSessionLocal() as session:
+            task = await session.get(SyncJob, task_id)
+            if task is None:
+                return
+            if task.status == "cancelled":
+                return
+            if task.status == "cancel_requested":
+                await finalize_cancelled_task(
+                    session,
+                    task,
+                    message="任务在启动前已取消",
+                    details={"reason": "cancel_requested_before_start"},
                 )
-                inserted += 1
-                await add_task_log(session, task_id, f"评论 {review_id} 回复发送成功")
-            except DeveloperReplyError as exc:
-                skipped += 1
+                await session.commit()
+                return
+            task.status = "running"
+            task.started_at = datetime.now()
+            await add_task_log(
+                session,
+                task_id,
+                "批量发送回复开始",
+                details={"review_ids": review_ids},
+            )
+            await session.commit()
+            service = DeveloperReplyService(session)
+            inserted = 0
+            skipped = 0
+            try:
+                for review_id in review_ids:
+                    if cancel_event.is_set():
+                        raise TaskCancelledError()
+                    try:
+                        await service.send_reply(
+                            review_id,
+                            confirmed=True,
+                            sent_by_user_id=sent_by_user_id,
+                        )
+                        inserted += 1
+                        await add_task_log(session, task_id, f"评论 {review_id} 回复发送成功")
+                    except DeveloperReplyError as exc:
+                        skipped += 1
+                        await add_task_log(
+                            session,
+                            task_id,
+                            f"评论 {review_id} 回复发送失败",
+                            level="error",
+                            details=format_exception_details(exc),
+                        )
+                        continue
+                task.inserted_count = inserted
+                task.skipped_count = skipped
+                task.status = "success" if skipped == 0 else "partial_success"
+                task.finished_at = datetime.now()
                 await add_task_log(
                     session,
                     task_id,
-                    f"评论 {review_id} 回复发送失败",
-                    level="error",
-                    details=format_exception_details(exc),
+                    "批量发送回复完成",
+                    details={"success": inserted, "failed": skipped},
                 )
-                continue
-        task.inserted_count = inserted
-        task.skipped_count = skipped
-        task.status = "success" if skipped == 0 else "partial_success"
-        task.finished_at = datetime.now()
-        await add_task_log(
-            session,
-            task_id,
-            "批量发送回复完成",
-            details={"success": inserted, "failed": skipped},
-        )
-        await session.commit()
+                await session.commit()
+            except TaskCancelledError:
+                task.inserted_count = inserted
+                task.skipped_count = skipped
+                await finalize_cancelled_task(
+                    session,
+                    task,
+                    message="批量发送回复已取消",
+                    details={"success": inserted, "failed": skipped},
+                )
+                await session.commit()
+    finally:
+        unregister_cancel_event(task_id)
 
 
 async def _create_background_task(

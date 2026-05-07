@@ -220,6 +220,7 @@ export type SyncJob = {
   started_at: string | null;
   finished_at: string | null;
   created_at: string;
+  can_cancel: boolean;
 };
 
 export type TaskLog = {
@@ -475,6 +476,12 @@ export async function fetchTasksBySchedule(scheduleId?: number | null, appId?: n
 
 export async function fetchTaskDetail(taskId: number): Promise<SyncJobDetail> {
   return apiGet<SyncJobDetail>(`/tasks/${taskId}`);
+}
+
+export async function cancelTask(taskId: number): Promise<SyncJob> {
+  return apiRequest<SyncJob>(`/tasks/${taskId}/cancel`, {
+    method: "POST"
+  });
 }
 
 export async function fetchTaskLogs(taskId: number): Promise<TaskLog[]> {

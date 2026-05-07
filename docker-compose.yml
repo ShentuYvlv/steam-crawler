@@ -3,6 +3,10 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile.prod
+      args:
+        PIP_INDEX_URL: ${PIP_INDEX_URL:-https://mirrors.aliyun.com/pypi/simple/}
+        PIP_TRUSTED_HOST: ${PIP_TRUSTED_HOST:-mirrors.aliyun.com}
+        PIP_RETRIES: ${PIP_RETRIES:-10}
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://steam:steam@host.docker.internal:5432/steam_reviews}
       REDIS_URL: ${REDIS_URL:-redis://host.docker.internal:6379/0}

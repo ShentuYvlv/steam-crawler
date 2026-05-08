@@ -231,6 +231,7 @@ function formatTaskType(value: string) {
 function formatTaskStatus(value: string) {
   const mapping: Record<string, string> = {
     pending: "排队中",
+    waiting: "等待探针",
     running: "执行中",
     cancel_requested: "取消中",
     cancelled: "已取消",
@@ -245,7 +246,7 @@ function statusBadgeClass(status: string) {
   if (status === "failed") {
     return "badge-red";
   }
-  if (status === "cancel_requested") {
+  if (status === "waiting" || status === "cancel_requested") {
     return "badge-orange";
   }
   if (status === "cancelled") {

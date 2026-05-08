@@ -1,7 +1,14 @@
 import type { SyncJob } from "@/lib/api";
 
 const storageKey = "steam_admin_seen_task_states";
-const attentionStatuses = new Set(["pending", "running", "cancel_requested", "failed", "partial_success"]);
+const attentionStatuses = new Set([
+  "pending",
+  "waiting",
+  "running",
+  "cancel_requested",
+  "failed",
+  "partial_success",
+]);
 
 function taskStateKey(task: SyncJob) {
   return `${task.id}:${task.status}`;

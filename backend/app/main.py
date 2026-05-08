@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import get_settings
+from app.services.task_recovery import recover_incomplete_steam_jobs
 from app.services.task_scheduler import TaskScheduler
 
 
@@ -19,6 +20,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         app.state.task_scheduler = scheduler
         await scheduler.start()
+    await recover_incomplete_steam_jobs()
     try:
         yield
     finally:

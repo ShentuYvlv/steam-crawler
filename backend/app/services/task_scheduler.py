@@ -5,11 +5,18 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, select
+from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 from app.core.database import AsyncSessionLocal
 from app.models import SyncJob, TaskSchedule
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
-from app.services.task_runtime import register_cancel_event, unregister_cancel_event
+from app.services.steam_probe_gate import wait_for_steam_availability
+from app.services.task_runtime import (
+    finalize_cancelled_task,
+    get_steam_sync_lock,
+    register_cancel_event,
+    unregister_cancel_event,
+)
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
@@ -87,27 +94,73 @@ class TaskScheduler:
 
                 cancel_event = register_cancel_event(sync_job.id)
                 try:
-                    service = SteamReviewSyncService(session, cancel_event=cancel_event)
-                    await service.sync_reviews(
-                        ReviewSyncOptions(
-                            app_id=schedule.app_id,
-                            schedule_id=schedule.id,
-                            schedule_name=schedule.name,
-                            trigger_type="scheduled",
-                            limit=None,
-                            language=str((schedule.options or {}).get("language") or "schinese"),
-                            filter=str((schedule.options or {}).get("filter") or "recent"),
-                            review_type=str((schedule.options or {}).get("review_type") or "all"),
-                            purchase_type=str(
-                                (schedule.options or {}).get("purchase_type") or "all"
-                            ),
-                            use_review_quality=bool(
-                                (schedule.options or {}).get("use_review_quality", True)
-                            ),
-                            per_page=int((schedule.options or {}).get("per_page") or 100),
-                            sync_job_id=sync_job.id,
-                        )
-                    )
+                    async with get_steam_sync_lock():
+                        while True:
+                            await session.refresh(sync_job)
+                            if sync_job.status == "cancelled":
+                                break
+                            if sync_job.status == "cancel_requested":
+                                await finalize_cancelled_task(
+                                    session,
+                                    sync_job,
+                                    message="任务已取消",
+                                    details={"reason": "cancel_requested_while_waiting"},
+                                )
+                                await session.commit()
+                                break
+                            try:
+                                await wait_for_steam_availability(
+                                    session,
+                                    sync_job,
+                                    cancel_event=cancel_event,
+                                )
+                            except TaskCancelledError:
+                                await session.refresh(sync_job)
+                                await finalize_cancelled_task(
+                                    session,
+                                    sync_job,
+                                    message="任务已取消",
+                                    details={"reason": "cancelled_during_probe_wait"},
+                                )
+                                await session.commit()
+                                break
+
+                            service = SteamReviewSyncService(session, cancel_event=cancel_event)
+                            try:
+                                result = await service.sync_reviews(
+                                    ReviewSyncOptions(
+                                        app_id=schedule.app_id,
+                                        schedule_id=schedule.id,
+                                        schedule_name=schedule.name,
+                                        trigger_type="scheduled",
+                                        limit=None,
+                                        language=str(
+                                            (schedule.options or {}).get("language") or "schinese"
+                                        ),
+                                        filter=str(
+                                            (schedule.options or {}).get("filter") or "recent"
+                                        ),
+                                        review_type=str(
+                                            (schedule.options or {}).get("review_type") or "all"
+                                        ),
+                                        purchase_type=str(
+                                            (schedule.options or {}).get("purchase_type") or "all"
+                                        ),
+                                        use_review_quality=bool(
+                                            (schedule.options or {}).get(
+                                                "use_review_quality", True
+                                            )
+                                        ),
+                                        per_page=int(
+                                            (schedule.options or {}).get("per_page") or 100
+                                        ),
+                                        sync_job_id=sync_job.id,
+                                    )
+                                )
+                            except SteamTemporarilyUnavailableError:
+                                continue
+                            if result.status in {"success", "partial_success", "cancelled"}:
+                                break
                 finally:
                     unregister_cancel_event(sync_job.id)
 
@@ -117,7 +170,7 @@ class TaskScheduler:
             .where(
                 SyncJob.schedule_id == schedule_id,
                 SyncJob.job_type == "steam_review_sync",
-                SyncJob.status.in_(("pending", "running", "cancel_requested")),
+                SyncJob.status.in_(("pending", "waiting", "running", "cancel_requested")),
             )
             .limit(1)
         )

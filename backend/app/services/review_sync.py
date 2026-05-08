@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.utils.steam_rate_limiter import get_steam_rate_limiter
-from src.utils.task_control import TaskCancelledError
+from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 from app.core.error_utils import format_exception_details, format_exception_message
 from app.importers import steam_api_review_to_values
@@ -210,6 +210,26 @@ class SteamReviewSyncService:
                 query_summary=query_summary,
             )
         except Exception as exc:
+            limiter = get_steam_rate_limiter()
+            if limiter.is_availability_error(exc):
+                sync_job.status = "waiting"
+                sync_job.inserted_count = inserted
+                sync_job.updated_count = updated
+                sync_job.skipped_count = skipped
+                sync_job.error_message = format_exception_message(exc)
+                await add_task_log(
+                    self.session,
+                    sync_job.id,
+                    "Steam 当前不可用，任务等待探针恢复",
+                    level="warning",
+                    details={
+                        **format_exception_details(exc),
+                        "sync_mode": sync_mode,
+                        "steam_rate_limit": await limiter.snapshot(),
+                    },
+                )
+                await self.session.commit()
+                raise SteamTemporarilyUnavailableError(format_exception_message(exc)) from exc
             sync_job.status = "failed"
             sync_job.inserted_count = inserted
             sync_job.updated_count = updated

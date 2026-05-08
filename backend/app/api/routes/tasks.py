@@ -4,6 +4,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 from app.core.database import AsyncSessionLocal, get_session
 from app.core.error_utils import format_exception_details, format_exception_message
@@ -20,9 +21,11 @@ from app.schemas import (
 )
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 from app.services.review_sync_queue import enqueue_review_sync_job
+from app.services.steam_probe_gate import wait_for_steam_availability
 from app.services.task_logs import add_task_log
 from app.services.task_runtime import (
     finalize_cancelled_task,
+    get_steam_sync_lock,
     is_task_cancellable,
     register_cancel_event,
     request_task_cancel,
@@ -250,29 +253,67 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
                 )
                 await session.commit()
                 return
-            service = SteamReviewSyncService(session, cancel_event=cancel_event)
             try:
                 schedule_name: str | None = None
                 if request.schedule_id is not None:
                     schedule = await session.get(TaskSchedule, request.schedule_id)
                     schedule_name = schedule.name if schedule is not None else None
 
-                await service.sync_reviews(
-                    ReviewSyncOptions(
-                        app_id=request.app_id,
-                        schedule_id=request.schedule_id,
-                        schedule_name=schedule_name,
-                        trigger_type="manual",
-                        limit=request.limit,
-                        language=request.language,
-                        filter=request.filter,
-                        review_type=request.review_type,
-                        purchase_type=request.purchase_type,
-                        use_review_quality=request.use_review_quality,
-                        per_page=request.per_page,
-                        sync_job_id=sync_job_id,
-                    )
-                )
+                async with get_steam_sync_lock():
+                    while True:
+                        task = await session.get(SyncJob, sync_job_id)
+                        if task is None:
+                            return
+                        if task.status == "cancelled":
+                            return
+                        if task.status == "cancel_requested":
+                            await finalize_cancelled_task(
+                                session,
+                                task,
+                                message="任务已取消",
+                                details={"reason": "cancel_requested_while_waiting"},
+                            )
+                            await session.commit()
+                            return
+                        try:
+                            await wait_for_steam_availability(
+                                session,
+                                task,
+                                cancel_event=cancel_event,
+                            )
+                        except TaskCancelledError:
+                            await session.refresh(task)
+                            await finalize_cancelled_task(
+                                session,
+                                task,
+                                message="任务已取消",
+                                details={"reason": "cancelled_during_probe_wait"},
+                            )
+                            await session.commit()
+                            return
+
+                        service = SteamReviewSyncService(session, cancel_event=cancel_event)
+                        try:
+                            result = await service.sync_reviews(
+                                ReviewSyncOptions(
+                                    app_id=request.app_id,
+                                    schedule_id=request.schedule_id,
+                                    schedule_name=schedule_name,
+                                    trigger_type="manual",
+                                    limit=request.limit,
+                                    language=request.language,
+                                    filter=request.filter,
+                                    review_type=request.review_type,
+                                    purchase_type=request.purchase_type,
+                                    use_review_quality=request.use_review_quality,
+                                    per_page=request.per_page,
+                                    sync_job_id=sync_job_id,
+                                )
+                            )
+                        except SteamTemporarilyUnavailableError:
+                            continue
+                        if result.status in {"success", "partial_success", "cancelled"}:
+                            return
             except Exception as exc:
                 task = await session.get(SyncJob, sync_job_id)
                 if task is not None and task.status not in {"cancelled", "failed"}:

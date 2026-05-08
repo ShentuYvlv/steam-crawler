@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import threading
 from datetime import datetime
 from typing import Final
@@ -7,12 +8,20 @@ from typing import Final
 from app.models import SyncJob
 from app.services.task_logs import add_task_log
 
-RUNNING_STATUSES: Final[set[str]] = {"pending", "running", "cancel_requested"}
-CANCELLABLE_STATUSES: Final[set[str]] = {"pending", "running", "cancel_requested"}
+RUNNING_STATUSES: Final[set[str]] = {"pending", "waiting", "running", "cancel_requested"}
+CANCELLABLE_STATUSES: Final[set[str]] = {"pending", "waiting", "running", "cancel_requested"}
 TERMINAL_STATUSES: Final[set[str]] = {"success", "partial_success", "failed", "cancelled"}
 
 _registry_lock = threading.Lock()
 _cancel_events: dict[int, threading.Event] = {}
+_steam_sync_lock: asyncio.Lock | None = None
+
+
+def get_steam_sync_lock() -> asyncio.Lock:
+    global _steam_sync_lock
+    if _steam_sync_lock is None:
+        _steam_sync_lock = asyncio.Lock()
+    return _steam_sync_lock
 
 
 def register_cancel_event(task_id: int) -> threading.Event:

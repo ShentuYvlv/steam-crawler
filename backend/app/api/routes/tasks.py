@@ -297,6 +297,12 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
                                 session,
                                 task,
                                 cancel_event=cancel_event,
+                                app_id=request.app_id,
+                                language=request.language,
+                                filter_type=request.filter,
+                                review_type=request.review_type,
+                                purchase_type=request.purchase_type,
+                                use_review_quality=request.use_review_quality,
                             )
                         except TaskCancelledError:
                             await session.refresh(task)

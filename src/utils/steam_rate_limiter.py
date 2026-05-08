@@ -24,7 +24,7 @@ class SteamRateLimiter:
         self._consecutive_successes = 0
         self._last_probe_at = 0.0
         self._last_probe_error: str | None = None
-        self.probe_interval_seconds = 600.0
+        self.probe_interval_seconds = 60.0
 
     async def before_request(self, stop_event: Any | None = None) -> dict[str, Any]:
         while True:
@@ -68,18 +68,41 @@ class SteamRateLimiter:
         *,
         stop_event: Any | None = None,
         on_probe: ProbeCallback | None = None,
+        app_id: int,
+        language: str = "schinese",
+        filter_type: str = "recent",
+        review_type: str = "all",
+        purchase_type: str = "all",
+        use_review_quality: bool = True,
     ) -> dict[str, Any]:
         while True:
             if stop_event is not None and stop_event.is_set():
                 raise TaskCancelledError()
-            probe_result = await self.probe()
+            probe_result = await self.probe(
+                app_id=app_id,
+                language=language,
+                filter_type=filter_type,
+                review_type=review_type,
+                purchase_type=purchase_type,
+                use_review_quality=use_review_quality,
+            )
             if on_probe is not None:
                 await on_probe(probe_result)
             if probe_result["ok"]:
                 return probe_result
-            await _sleep_with_cancel(self.probe_interval_seconds, stop_event)
+            next_probe_seconds = float(probe_result.get("next_probe_seconds", self.probe_interval_seconds))
+            await _sleep_with_cancel(next_probe_seconds, stop_event)
 
-    async def probe(self) -> dict[str, Any]:
+    async def probe(
+        self,
+        *,
+        app_id: int,
+        language: str,
+        filter_type: str,
+        review_type: str,
+        purchase_type: str,
+        use_review_quality: bool,
+    ) -> dict[str, Any]:
         now = time.monotonic()
         async with httpx.AsyncClient(
             headers={
@@ -94,35 +117,46 @@ class SteamRateLimiter:
         ) as client:
             try:
                 response = await client.get(
-                    "https://store.steampowered.com/ajaxappreviews/10",
-                    params={
-                        "json": "1",
-                        "cursor": "*",
-                        "language": "all",
-                        "filter": "recent",
-                        "review_type": "all",
-                        "purchase_type": "all",
-                        "num_per_page": "1",
-                    },
+                    f"https://store.steampowered.com/ajaxappreviews/{app_id}",
+                    params=self._build_probe_params(
+                        language=language,
+                        filter_type=filter_type,
+                        review_type=review_type,
+                        purchase_type=purchase_type,
+                        use_review_quality=use_review_quality,
+                    ),
                 )
                 response.raise_for_status()
+                payload = response.json()
+                if payload.get("success") != 1:
+                    raise httpx.RemoteProtocolError(
+                        f"Steam probe success flag invalid: {payload.get('success')}"
+                    )
                 await self.record_success()
                 async with self._lock:
                     self._last_probe_at = now
                     self._last_probe_error = None
                     self._cooldown_until = 0.0
-                    return {"ok": True, "probe": "steam_ajaxappreviews", **self._snapshot_locked(now)}
+                    return {
+                        "ok": True,
+                        "probe": "steam_ajaxappreviews",
+                        "app_id": app_id,
+                        "next_probe_seconds": self._next_probe_seconds_locked(now),
+                        **self._snapshot_locked(now),
+                    }
             except Exception as exc:
                 snapshot = await self.record_error(exc)
                 async with self._lock:
                     self._last_probe_at = now
                     self._last_probe_error = str(exc) or type(exc).__name__
+                    next_probe_seconds = self._next_probe_seconds_locked(now)
                 return {
                     "ok": False,
                     "probe": "steam_ajaxappreviews",
+                    "app_id": app_id,
                     "error": str(exc) or type(exc).__name__,
                     "exception_type": type(exc).__name__,
-                    "next_probe_seconds": self.probe_interval_seconds,
+                    "next_probe_seconds": next_probe_seconds,
                     **snapshot,
                 }
 
@@ -189,6 +223,46 @@ class SteamRateLimiter:
         if isinstance(exc, SteamTemporarilyUnavailableError):
             return True
         return False
+
+    def _build_probe_params(
+        self,
+        *,
+        language: str,
+        filter_type: str,
+        review_type: str,
+        purchase_type: str,
+        use_review_quality: bool,
+    ) -> dict[str, Any]:
+        return {
+            "json": "1",
+            "cursor": "*",
+            "language": language,
+            "filter": filter_type,
+            "review_type": review_type,
+            "purchase_type": purchase_type,
+            "num_per_page": "1",
+            "date_range_type": "all",
+            "day_range": "30",
+            "start_date": "-1",
+            "end_date": "-1",
+            "filter_offtopic_activity": "1",
+            "playtime_filter_max": "0",
+            "playtime_filter_min": "0",
+            "playtime_type": "all",
+            "use_review_quality": "1" if use_review_quality else "0",
+        }
+
+    def _next_probe_seconds_locked(self, now: float) -> float:
+        cooldown_remaining = max(0.0, self._cooldown_until - now)
+        if cooldown_remaining > 0:
+            return max(30.0, min(300.0, round(cooldown_remaining, 2)))
+        if self._failure_streak >= 4:
+            return 300.0
+        if self._failure_streak == 3:
+            return 180.0
+        if self._failure_streak == 2:
+            return 90.0
+        return 30.0
 
     def _snapshot_locked(self, now: float) -> dict[str, Any]:
         return {

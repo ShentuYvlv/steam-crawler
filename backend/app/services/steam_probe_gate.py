@@ -13,6 +13,12 @@ async def wait_for_steam_availability(
     task: SyncJob,
     *,
     cancel_event,
+    app_id: int,
+    language: str = "schinese",
+    filter_type: str = "recent",
+    review_type: str = "all",
+    purchase_type: str = "all",
+    use_review_quality: bool = True,
 ) -> None:
     limiter = get_steam_rate_limiter()
     task.status = "waiting"
@@ -37,4 +43,13 @@ async def wait_for_steam_availability(
         )
         await session.commit()
 
-    await limiter.wait_until_available(stop_event=cancel_event, on_probe=record_probe)
+    await limiter.wait_until_available(
+        stop_event=cancel_event,
+        on_probe=record_probe,
+        app_id=app_id,
+        language=language,
+        filter_type=filter_type,
+        review_type=review_type,
+        purchase_type=purchase_type,
+        use_review_quality=use_review_quality,
+    )

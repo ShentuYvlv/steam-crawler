@@ -116,6 +116,10 @@ function TaskQueuePage() {
                 <p className="mt-3 text-sm text-slate-600">
                   新增 {task.inserted_count} / 更新 {task.updated_count} / 跳过 {task.skipped_count}
                 </p>
+                <div className="mt-3 space-y-1 text-xs text-slate-500">
+                  <p>开始：{formatDateTimeNullable(task.started_at)}</p>
+                  <p>结束：{formatDateTimeNullable(task.finished_at)}</p>
+                </div>
               </button>
             ))}
             {!tasksQuery.isLoading && (tasksQuery.data?.length ?? 0) === 0 ? (
@@ -161,6 +165,8 @@ function TaskQueuePage() {
                 <Metric label="App ID" value={String(detailQuery.data.app_id ?? "-")} />
                 <Metric label="触发方式" value={detailQuery.data.trigger_type === "scheduled" ? "定时" : "手动"} />
                 <Metric label="请求规模" value={String(detailQuery.data.requested_limit ?? "-")} />
+                <Metric label="开始时间" value={formatDateTimeNullable(detailQuery.data.started_at)} />
+                <Metric label="结束时间" value={formatDateTimeNullable(detailQuery.data.finished_at)} />
               </div>
 
               {detailQuery.data.error_message ? (
@@ -263,6 +269,13 @@ function statusBadgeClass(status: string) {
 
 function formatDateTime(value: string) {
   return new Date(value).toLocaleString("zh-CN", { hour12: false });
+}
+
+function formatDateTimeNullable(value: string | null) {
+  if (!value) {
+    return "—";
+  }
+  return formatDateTime(value);
 }
 
 export const taskQueueRoute = createRoute({

@@ -204,3 +204,37 @@ async def test_cancel_task_route_marks_pending_and_running_tasks(monkeypatch) ->
     assert running_response.status_code == 200
     assert running_response.json()["status"] == "cancel_requested"
     assert running_response.json()["can_cancel"] is True
+
+
+async def test_task_detail_settles_orphaned_cancel_requested_task() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        seed_session.add(
+            SyncJob(
+                job_type="bulk_reply_generation",
+                source_type="aliyun_api",
+                status="cancel_requested",
+                requested_limit=1,
+            )
+        )
+        await seed_session.commit()
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/tasks/1")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert response.json()["can_cancel"] is False

@@ -170,6 +170,16 @@ export type ReplyDraft = {
   updated_at: string;
 };
 
+export type ReplyDraftAuditItem = ReplyDraft & {
+  app_id: number;
+  game_name: string | null;
+  recommendation_id: string;
+  review_text: string;
+  persona_name: string | null;
+  voted_up: boolean | null;
+  timestamp_created: string | null;
+};
+
 export type ReplyRecord = {
   id: number;
   review_id: number;
@@ -186,9 +196,11 @@ export type ReplyRecord = {
   created_at: string;
   updated_at: string;
   app_id?: number;
+  game_name?: string | null;
   review_text?: string;
   persona_name?: string | null;
   voted_up?: boolean | null;
+  timestamp_created?: string | null;
 };
 
 export type SyncJob = {
@@ -421,6 +433,15 @@ export async function regenerateReplyDraft(reviewId: number): Promise<{ draft: R
 
 export async function fetchReplyRecords(): Promise<ReplyRecord[]> {
   return apiGet<ReplyRecord[]>("/reply-records");
+}
+
+export async function fetchReplyAuditQueue(appId?: number | null): Promise<ReplyDraftAuditItem[]> {
+  const params = new URLSearchParams();
+  if (appId) {
+    params.set("app_id", String(appId));
+  }
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return apiGet<ReplyDraftAuditItem[]>(`/reply-records/audit-queue${query}`);
 }
 
 export async function bulkSendReplyRecords(payload: {

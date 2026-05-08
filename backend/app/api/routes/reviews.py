@@ -36,7 +36,9 @@ from app.services.task_logs import add_task_log
 from app.services.task_runtime import (
     finalize_cancelled_task,
     register_cancel_event,
+    register_active_task,
     unregister_cancel_event,
+    unregister_active_task,
 )
 
 router = APIRouter(prefix="/reviews", tags=["reviews"])
@@ -324,6 +326,7 @@ async def update_review_status(
 
 async def _generate_reply_drafts_in_background(task_id: int, review_ids: list[int]) -> None:
     cancel_event = register_cancel_event(task_id)
+    register_active_task(task_id)
     try:
         async with AsyncSessionLocal() as session:
             task = await session.get(SyncJob, task_id)
@@ -393,12 +396,14 @@ async def _generate_reply_drafts_in_background(task_id: int, review_ids: list[in
                 await session.commit()
     finally:
         unregister_cancel_event(task_id)
+        unregister_active_task(task_id)
 
 
 async def _send_replies_in_background(
     task_id: int, review_ids: list[int], sent_by_user_id: int | None
 ) -> None:
     cancel_event = register_cancel_event(task_id)
+    register_active_task(task_id)
     try:
         async with AsyncSessionLocal() as session:
             task = await session.get(SyncJob, task_id)
@@ -472,6 +477,7 @@ async def _send_replies_in_background(
                 await session.commit()
     finally:
         unregister_cancel_event(task_id)
+        unregister_active_task(task_id)
 
 
 async def _create_background_task(

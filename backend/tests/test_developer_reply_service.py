@@ -99,6 +99,7 @@ async def test_reply_records_delete_request_route() -> None:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             headers = {"Authorization": f"Bearer {token}"}
             list_response = await client.get("/api/reply-records")
+            audit_response = await client.get("/api/reply-records/audit-queue")
             delete_response = await client.post(
                 f"/api/reply-records/{record_id}/delete-request",
                 headers=headers,
@@ -110,6 +111,10 @@ async def test_reply_records_delete_request_route() -> None:
 
     assert list_response.status_code == 200
     assert list_response.json()[0]["content"] == "已发送回复"
+    assert list_response.json()[0]["game_name"] == "test game"
+    assert audit_response.status_code == 200
+    assert audit_response.json()[0]["content"] == "感谢反馈，我们会继续优化。"
+    assert audit_response.json()[0]["game_name"] == "test game"
     assert delete_response.status_code == 200
     assert delete_response.json()["delete_status"] == "requested"
     assert delete_response.json()["delete_request_reason"] == "测试删除请求"

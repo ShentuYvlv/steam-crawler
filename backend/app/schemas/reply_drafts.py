@@ -20,6 +20,16 @@ class ReplyDraftResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ReplyDraftAuditListItem(ReplyDraftResponse):
+    app_id: int
+    game_name: str | None
+    recommendation_id: str
+    review_text: str
+    persona_name: str | None
+    voted_up: bool | None
+    timestamp_created: datetime | None
+
+
 class GenerateReplyResponse(BaseModel):
     draft: ReplyDraftResponse
 

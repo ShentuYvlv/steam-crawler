@@ -7,8 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import get_session
+from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.models import Base, ReplyDraft, ReplyStrategy, SteamGame, SteamReview
+from app.models import Base, ReplyDraft, ReplyStrategy, SteamGame, SteamReview, User
 from app.services.aliyun_client import AliyunChatOptions
 from app.services.reply_generation import ReplyGenerationError, ReplyGenerationService
 
@@ -158,6 +159,64 @@ async def test_get_reply_draft_route() -> None:
     assert response.status_code == 200
     assert response.json()["content"] == "草稿内容"
     assert response.json()["status"] == "pending_review"
+
+
+async def test_update_reply_draft_can_reject_draft() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        review = await seed_reply_generation_data(seed_session)
+        draft = ReplyDraft(
+            review_id=review.id,
+            strategy_id=1,
+            strategy_version=1,
+            content="草稿内容",
+            status="pending_review",
+            model_name="qwen-plus",
+            prompt_snapshot="prompt",
+        )
+        admin = User(
+            username="admin",
+            password_hash=hash_password("password123"),
+            role="admin",
+            is_active=True,
+        )
+        seed_session.add_all([draft, admin])
+        await seed_session.commit()
+        draft_id = draft.id
+        review_id = review.id
+        token = create_access_token(admin)
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.patch(
+                f"/api/reply-drafts/{draft_id}",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"status": "rejected"},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    async with session_factory() as check_session:
+        stored_draft = await check_session.get(ReplyDraft, draft_id)
+        stored_review = await check_session.get(SteamReview, review_id)
+
+    await engine.dispose()
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "rejected"
+    assert stored_draft is not None
+    assert stored_draft.reviewed_at is not None
+    assert stored_review is not None
+    assert stored_review.reply_status == "rejected"
 
 
 async def seed_reply_generation_data(session: AsyncSession) -> SteamReview:

@@ -8,8 +8,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
 from app.core.security import RequireOperator
-from app.models import DeveloperReply, OperationLog, SteamReview
-from app.schemas import DeleteRequestCreate, ReplyRecordListItem, ReplyRecordResponse
+from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamGame, SteamReview
+from app.schemas import (
+    DeleteRequestCreate,
+    ReplyDraftAuditListItem,
+    ReplyRecordListItem,
+    ReplyRecordResponse,
+)
 
 router = APIRouter(prefix="/reply-records", tags=["reply-records"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
@@ -20,27 +25,75 @@ CHINA_TZ = ZoneInfo("Asia/Shanghai")
 async def list_reply_records(
     session: SessionDependency,
     status: str | None = None,
+    app_id: int | None = Query(default=None, gt=0),
     limit: int = Query(default=50, gt=0, le=200),
 ) -> list[ReplyRecordListItem]:
     statement = (
-        select(DeveloperReply, SteamReview)
+        select(DeveloperReply, SteamReview, SteamGame)
         .join(SteamReview, SteamReview.id == DeveloperReply.review_id)
+        .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
         .order_by(desc(DeveloperReply.created_at), desc(DeveloperReply.id))
         .limit(limit)
     )
     if status:
         statement = statement.where(DeveloperReply.status == status)
+    if app_id:
+        statement = statement.where(SteamReview.app_id == app_id)
 
     result = await session.execute(statement)
     items: list[ReplyRecordListItem] = []
-    for record, review in result.all():
+    for record, review, game in result.all():
         items.append(
             ReplyRecordListItem(
                 **ReplyRecordResponse.model_validate(record).model_dump(),
                 app_id=review.app_id,
+                game_name=game.name,
                 review_text=review.review_text,
                 persona_name=review.persona_name,
                 voted_up=review.voted_up,
+                timestamp_created=review.timestamp_created,
+            )
+        )
+    return items
+
+
+@router.get("/audit-queue", response_model=list[ReplyDraftAuditListItem])
+async def list_reply_audit_queue(
+    session: SessionDependency,
+    app_id: int | None = Query(default=None, gt=0),
+    status: str | None = Query(default=None),
+    limit: int = Query(default=100, gt=0, le=500),
+) -> list[ReplyDraftAuditListItem]:
+    statement = (
+        select(ReplyDraft, SteamReview, SteamGame)
+        .join(SteamReview, SteamReview.id == ReplyDraft.review_id)
+        .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
+        .where(ReplyDraft.status.in_(["pending_review", "generation_failed", "send_failed"]))
+        .order_by(
+            SteamGame.name.asc(),
+            desc(SteamReview.timestamp_created),
+            desc(ReplyDraft.created_at),
+        )
+        .limit(limit)
+    )
+    if app_id:
+        statement = statement.where(SteamReview.app_id == app_id)
+    if status:
+        statement = statement.where(ReplyDraft.status == status)
+
+    result = await session.execute(statement)
+    items: list[ReplyDraftAuditListItem] = []
+    for draft, review, game in result.all():
+        items.append(
+            ReplyDraftAuditListItem(
+                **draft_to_response(draft),
+                app_id=review.app_id,
+                game_name=game.name,
+                recommendation_id=review.recommendation_id,
+                review_text=review.review_text,
+                persona_name=review.persona_name,
+                voted_up=review.voted_up,
+                timestamp_created=review.timestamp_created,
             )
         )
     return items
@@ -75,3 +128,20 @@ async def create_delete_request(
     await session.commit()
     await session.refresh(record)
     return record
+
+
+def draft_to_response(draft: ReplyDraft) -> dict:
+    return {
+        "id": draft.id,
+        "review_id": draft.review_id,
+        "strategy_id": draft.strategy_id,
+        "strategy_version": draft.strategy_version,
+        "content": draft.content,
+        "status": draft.status,
+        "model_name": draft.model_name,
+        "prompt_snapshot": draft.prompt_snapshot,
+        "error_message": draft.error_message,
+        "reviewed_at": draft.reviewed_at,
+        "created_at": draft.created_at,
+        "updated_at": draft.updated_at,
+    }

@@ -63,7 +63,8 @@ const processingStatusText: Record<string, string> = {
 const replyStatusText: Record<string, string> = {
   none: "未回复",
   drafted: "已生成草稿",
-  replied: "已回复"
+  replied: "已回复",
+  rejected: "已驳回"
 };
 
 function ReviewsPage() {
@@ -291,6 +292,7 @@ function ReviewsPage() {
             <option value="">全部</option>
             <option value="none">未回复</option>
             <option value="drafted">已生成草稿</option>
+            <option value="rejected">已驳回</option>
             <option value="replied">已回复</option>
           </FilterSelect>
           <FilterSelect
@@ -878,6 +880,15 @@ function ReplyDraftAuditPanel({
       void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
     }
   });
+  const rejectMutation = useMutation({
+    mutationFn: () => updateReplyDraft(latestDraft?.id as number, { status: "rejected" }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
+    }
+  });
 
   const canSend = draftText.trim().length > 0 && !sendMutation.isPending;
 
@@ -937,6 +948,18 @@ function ReplyDraftAuditPanel({
         </Button>
         <Button
           type="button"
+          variant="outline"
+          disabled={!latestDraft || rejectMutation.isPending || latestDraft.status === "rejected"}
+          onClick={() => {
+            if (window.confirm("确认驳回这条草稿？驳回后会从审核队列移除。")) {
+              rejectMutation.mutate();
+            }
+          }}
+        >
+          {rejectMutation.isPending ? "驳回中..." : "驳回草稿"}
+        </Button>
+        <Button
+          type="button"
           disabled={!canSend}
           onClick={() => {
             if (window.confirm("确认发送这条开发者回复到 Steam？")) {
@@ -954,6 +977,7 @@ function ReplyDraftAuditPanel({
       {saveDraftMutation.isError || sendMutation.isError || regenerateMutation.isError ? (
         <p className="mt-3 text-xs font-medium text-rose-600">
           {(saveDraftMutation.error as Error | null)?.message ||
+            (rejectMutation.error as Error | null)?.message ||
             (sendMutation.error as Error | null)?.message ||
             (regenerateMutation.error as Error | null)?.message}
         </p>

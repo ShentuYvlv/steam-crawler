@@ -26,10 +26,13 @@ from app.services.task_logs import add_task_log
 from app.services.task_runtime import (
     finalize_cancelled_task,
     get_steam_sync_lock,
+    is_task_active,
     is_task_cancellable,
     register_cancel_event,
+    register_active_task,
     request_task_cancel,
     unregister_cancel_event,
+    unregister_active_task,
 )
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
@@ -56,10 +59,13 @@ async def list_tasks(
     )
     items: list[dict] = []
     for job, game_name in result.all():
+        await settle_orphaned_cancellation(session, job)
+        await session.refresh(job)
         payload = SyncJobListItem.model_validate(job).model_dump()
         payload["game_name"] = game_name
         payload["can_cancel"] = is_task_cancellable(job.status)
         items.append(payload)
+    await session.commit()
     return items
 
 
@@ -180,6 +186,9 @@ async def get_task_detail(task_id: int, session: SessionDependency) -> SyncJobWi
     if row is None:
         raise HTTPException(status_code=404, detail="Task not found")
     task, game_name = row
+    await settle_orphaned_cancellation(session, task)
+    await session.commit()
+    await session.refresh(task)
     payload = SyncJobWithLogsResponse.model_validate(task).model_dump()
     payload["game_name"] = game_name
     payload["can_cancel"] = is_task_cancellable(task.status)
@@ -227,6 +236,13 @@ async def cancel_task(
             "收到取消请求",
             details={"status": "cancel_requested"},
         )
+    elif not is_task_active(task.id):
+        await finalize_cancelled_task(
+            session,
+            task,
+            message="任务已取消",
+            details={"reason": "cancel_requested_without_active_runner"},
+        )
     request_task_cancel(task.id)
     await session.commit()
     payload = SyncJobListItem.model_validate(task).model_dump()
@@ -237,6 +253,7 @@ async def cancel_task(
 
 async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> None:
     cancel_event = register_cancel_event(sync_job_id)
+    register_active_task(sync_job_id)
     try:
         async with AsyncSessionLocal() as session:
             task = await session.get(SyncJob, sync_job_id)
@@ -329,3 +346,14 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
                     await session.commit()
     finally:
         unregister_cancel_event(sync_job_id)
+        unregister_active_task(sync_job_id)
+
+
+async def settle_orphaned_cancellation(session: AsyncSession, task: SyncJob) -> None:
+    if task.status == "cancel_requested" and not is_task_active(task.id):
+        await finalize_cancelled_task(
+            session,
+            task,
+            message="任务已取消",
+            details={"reason": "orphaned_cancel_requested"},
+        )

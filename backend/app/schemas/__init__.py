@@ -16,6 +16,7 @@ from app.schemas.reply_drafts import (
     BulkGenerateReplyRequest,
     BulkGenerateReplyResponse,
     GenerateReplyResponse,
+    ReplyDraftAuditListItem,
     ReplyDraftResponse,
     ReplyDraftUpdate,
 )
@@ -69,6 +70,7 @@ __all__ = [
     "LoginRequest",
     "LoginResponse",
     "ReviewDetailResponse",
+    "ReplyDraftAuditListItem",
     "ReplyDraftResponse",
     "ReplyDraftUpdate",
     "ReplyRecordListItem",

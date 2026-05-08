@@ -14,6 +14,7 @@ TERMINAL_STATUSES: Final[set[str]] = {"success", "partial_success", "failed", "c
 
 _registry_lock = threading.Lock()
 _cancel_events: dict[int, threading.Event] = {}
+_active_tasks: set[int] = set()
 _steam_sync_lock: asyncio.Lock | None = None
 
 
@@ -36,6 +37,21 @@ def register_cancel_event(task_id: int) -> threading.Event:
 def unregister_cancel_event(task_id: int) -> None:
     with _registry_lock:
         _cancel_events.pop(task_id, None)
+
+
+def register_active_task(task_id: int) -> None:
+    with _registry_lock:
+        _active_tasks.add(task_id)
+
+
+def unregister_active_task(task_id: int) -> None:
+    with _registry_lock:
+        _active_tasks.discard(task_id)
+
+
+def is_task_active(task_id: int) -> bool:
+    with _registry_lock:
+        return task_id in _active_tasks
 
 
 def request_task_cancel(task_id: int) -> None:

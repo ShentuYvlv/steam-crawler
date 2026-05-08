@@ -13,6 +13,7 @@ from app.schemas import (
     ReplyStrategyResponse,
     ReplyStrategyUpdate,
 )
+from app.services.reply_generation import ensure_active_reply_strategy
 from app.services.reply_skill import load_default_reply_skill_content, resolve_reply_skill_content
 
 router = APIRouter(prefix="/reply-strategies", tags=["reply-strategies"])
@@ -32,8 +33,7 @@ async def list_reply_strategies(session: SessionDependency) -> list[ReplyStrateg
 
 @router.get("/active", response_model=ReplyStrategyResponse)
 async def get_active_reply_strategy(session: SessionDependency) -> ReplyStrategyResponse:
-    result = await session.execute(select(ReplyStrategy).where(ReplyStrategy.is_active.is_(True)))
-    strategy = result.scalars().first()
+    strategy = await ensure_active_reply_strategy(session)
     if strategy is None:
         raise HTTPException(status_code=404, detail="Active reply strategy not found")
     return serialize_strategy(strategy)

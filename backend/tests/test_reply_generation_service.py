@@ -17,7 +17,7 @@ class FakeAIClient:
     async def generate_reply(self, prompt: str, options: AliyunChatOptions) -> str:
         assert "这是一条需要认真回复的差评" in prompt
         assert "Steam 评论 AI 回复 Skill" in prompt
-        assert options.model == "qwen-plus"
+        assert options.model
         return "感谢你的反馈，我们会继续优化相关体验。"
 
 
@@ -77,6 +77,49 @@ async def test_reply_generation_records_failure_draft() -> None:
     assert draft.error_message == "mock aliyun failure"
     assert stored_review is not None
     assert stored_review.reply_status == "generation_failed"
+
+
+async def test_reply_generation_auto_bootstraps_active_strategy() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        session.add(SteamGame(app_id=3350200, name="test game"))
+        review = SteamReview(
+            app_id=3350200,
+            recommendation_id="1002",
+            steam_id="steam-b",
+            persona_name="玩家B",
+            review_text="这是一条需要认真回复的差评",
+            voted_up=False,
+            votes_up=2,
+            votes_funny=0,
+            comment_count=0,
+            playtime_forever=1.0,
+            timestamp_created=datetime(2026, 4, 28, 12, tzinfo=UTC),
+            sync_type="stock",
+            source_type="csv",
+            processing_status="pending",
+            reply_status="none",
+        )
+        session.add(review)
+        await session.commit()
+        await session.refresh(review)
+
+        service = ReplyGenerationService(session, ai_client_factory=FakeAIClient)
+        result = await service.generate_for_review(review.id)
+        strategy = await session.scalar(
+            select(ReplyStrategy).where(ReplyStrategy.is_active.is_(True))
+        )
+
+    await engine.dispose()
+
+    assert result.draft.strategy_id is not None
+    assert strategy is not None
+    assert strategy.name == "默认回复 Skill"
+    assert strategy.is_active is True
 
 
 async def test_get_reply_draft_route() -> None:

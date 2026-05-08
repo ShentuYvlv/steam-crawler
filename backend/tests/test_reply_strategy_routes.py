@@ -72,3 +72,30 @@ async def test_reply_strategy_create_update_activate() -> None:
     strategies = list_response.json()
     assert len(strategies) == 2
     assert sum(1 for strategy in strategies if strategy["is_active"]) == 1
+
+
+async def test_get_active_reply_strategy_bootstraps_default() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            response = await client.get("/api/reply-strategies/active")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert response.status_code == 200
+    assert response.json()["is_active"] is True
+    assert response.json()["name"] == "默认回复 Skill"

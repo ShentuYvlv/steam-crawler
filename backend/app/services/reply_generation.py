@@ -8,6 +8,7 @@ from typing import Protocol
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import get_settings
 from app.core.error_utils import format_exception_message
 from app.models import ReplyDraft, ReplyStrategy, SteamReview
 from app.services.aliyun_client import AliyunChatClient, AliyunChatOptions
@@ -73,13 +74,8 @@ class ReplyGenerationService:
         return ReplyGenerationResult(draft=draft)
 
     async def _get_active_strategy(self) -> ReplyStrategy | None:
-        result = await self.session.execute(
-            select(ReplyStrategy)
-            .where(ReplyStrategy.is_active.is_(True))
-            .order_by(desc(ReplyStrategy.updated_at), desc(ReplyStrategy.id))
-            .limit(1)
-        )
-        return result.scalar_one_or_none()
+        strategy = await ensure_active_reply_strategy(self.session)
+        return strategy
 
     async def _record_failed_draft(
         self,
@@ -105,6 +101,46 @@ class ReplyGenerationService:
         await self.session.commit()
         await self.session.refresh(draft)
         return draft
+
+
+async def ensure_active_reply_strategy(session: AsyncSession) -> ReplyStrategy | None:
+    result = await session.execute(
+        select(ReplyStrategy)
+        .where(ReplyStrategy.is_active.is_(True))
+        .order_by(desc(ReplyStrategy.updated_at), desc(ReplyStrategy.id))
+        .limit(1)
+    )
+    strategy = result.scalar_one_or_none()
+    if strategy is not None:
+        return strategy
+
+    latest_result = await session.execute(
+        select(ReplyStrategy)
+        .order_by(desc(ReplyStrategy.updated_at), desc(ReplyStrategy.id))
+        .limit(1)
+    )
+    latest = latest_result.scalar_one_or_none()
+    if latest is not None:
+        latest.is_active = True
+        await session.commit()
+        await session.refresh(latest)
+        return latest
+
+    settings = get_settings()
+    default_skill = resolve_reply_skill_content(None)
+    strategy = ReplyStrategy(
+        name="默认回复 Skill",
+        description="系统自动创建的默认 Steam 评论回复 Skill。",
+        skill_content=default_skill,
+        prompt_template=default_skill,
+        model_name=settings.aliyun_model,
+        temperature=0.4,
+        is_active=True,
+    )
+    session.add(strategy)
+    await session.commit()
+    await session.refresh(strategy)
+    return strategy
 
 
 def build_reply_prompt(review: SteamReview, strategy: ReplyStrategy) -> str:

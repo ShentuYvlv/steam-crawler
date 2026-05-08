@@ -35,6 +35,10 @@ class Settings(BaseSettings):
 
     aliyun_api_key: str | None = Field(default=None, validation_alias="ALIYUN_API_KEY")
     aliyun_model: str = Field(default="qwen-plus", validation_alias="ALIYUN_MODEL")
+    aliyun_base_url: str = Field(
+        default="https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation",
+        validation_alias="ALIYUN_BASE_URL",
+    )
 
     steam_cookie_file: str = Field(
         default="./data/steam_cookie.txt",

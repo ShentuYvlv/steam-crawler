@@ -19,6 +19,7 @@ class ReplyStrategy(TimestampMixin, Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    skill_content: Mapped[str] = mapped_column(Text, default="", nullable=False)
     prompt_template: Mapped[str] = mapped_column(Text, nullable=False)
     reply_rules: Mapped[str | None] = mapped_column(Text)
     forbidden_terms: Mapped[list[str] | None] = mapped_column(JSON)

@@ -29,7 +29,7 @@ from app.schemas.reply_records import (
     SendReplyResponse,
 )
 from app.schemas.reply_strategies import (
-    ReplyExample,
+    ReplySkillTemplateResponse,
     ReplyStrategyCreate,
     ReplyStrategyResponse,
     ReplyStrategyUpdate,
@@ -79,7 +79,7 @@ __all__ = [
     "ReviewSyncResponse",
     "ReviewStatusUpdateRequest",
     "ReviewStatusUpdateResponse",
-    "ReplyExample",
+    "ReplySkillTemplateResponse",
     "ReplyStrategyCreate",
     "ReplyStrategyResponse",
     "ReplyStrategyUpdate",

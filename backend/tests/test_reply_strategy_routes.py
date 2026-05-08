@@ -30,33 +30,23 @@ async def test_reply_strategy_create_update_activate() -> None:
                 json={
                     "name": "默认策略",
                     "description": "测试策略",
-                    "prompt_template": "请基于评论生成回复：{review_text}",
-                    "reply_rules": "先共情，再解释。",
-                    "forbidden_terms": ["攻击用户"],
-                    "good_examples": [
-                        {
-                            "title": "差评安抚",
-                            "review": "不好玩",
-                            "reply": "感谢反馈，我们会继续优化。",
-                        }
-                    ],
-                    "brand_voice": "真诚、克制、友好",
-                    "classification_strategy": "优先处理高赞差评",
+                    "skill_content": "# 回复 Skill\\n\\n先共情，再解释。",
                     "model_name": "qwen-plus",
                     "temperature": 0.4,
                     "is_active": True,
                 },
             )
             active_response = await client.get("/api/reply-strategies/active")
+            default_skill_response = await client.get("/api/reply-strategies/default-skill")
             update_response = await client.patch(
                 "/api/reply-strategies/1",
-                json={"reply_rules": "先感谢，再说明后续计划。"},
+                json={"skill_content": "# 更新后的 Skill\\n\\n先感谢，再说明后续计划。"},
             )
             second_response = await client.post(
                 "/api/reply-strategies",
                 json={
                     "name": "备用策略",
-                    "prompt_template": "备用模板：{review_text}",
+                    "skill_content": "# 备用 Skill\\n\\n给出更简短的回复。",
                     "is_active": False,
                 },
             )
@@ -68,10 +58,14 @@ async def test_reply_strategy_create_update_activate() -> None:
 
     assert create_response.status_code == 201
     assert create_response.json()["is_active"] is True
+    assert create_response.json()["skill_content"].startswith("# 回复 Skill")
     assert active_response.status_code == 200
     assert active_response.json()["name"] == "默认策略"
+    assert default_skill_response.status_code == 200
+    assert "Steam 评论 AI 回复 Skill" in default_skill_response.json()["content"]
     assert update_response.status_code == 200
     assert update_response.json()["version"] == 2
+    assert "更新后的 Skill" in update_response.json()["skill_content"]
     assert second_response.status_code == 201
     assert activate_response.status_code == 200
     assert activate_response.json()["is_active"] is True

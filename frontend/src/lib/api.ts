@@ -129,22 +129,11 @@ export type ReviewQuery = {
   page_size?: number;
 };
 
-export type ReplyExample = {
-  title: string;
-  review: string;
-  reply: string;
-};
-
 export type ReplyStrategy = {
   id: number;
   name: string;
   description: string | null;
-  prompt_template: string;
-  reply_rules: string | null;
-  forbidden_terms: string[];
-  good_examples: ReplyExample[];
-  brand_voice: string | null;
-  classification_strategy: string | null;
+  skill_content: string;
   model_name: string;
   temperature: number | null;
   version: number;
@@ -156,15 +145,14 @@ export type ReplyStrategy = {
 export type ReplyStrategyPayload = {
   name: string;
   description?: string | null;
-  prompt_template: string;
-  reply_rules?: string | null;
-  forbidden_terms?: string[];
-  good_examples?: ReplyExample[];
-  brand_voice?: string | null;
-  classification_strategy?: string | null;
+  skill_content: string;
   model_name?: string;
   temperature?: number | null;
   is_active?: boolean;
+};
+
+export type ReplySkillTemplate = {
+  content: string;
 };
 
 export type ReplyDraft = {
@@ -551,6 +539,10 @@ export async function fetchReplyStrategies(): Promise<ReplyStrategy[]> {
 
 export async function fetchActiveReplyStrategy(): Promise<ReplyStrategy> {
   return apiGet<ReplyStrategy>("/reply-strategies/active");
+}
+
+export async function fetchDefaultReplySkill(): Promise<ReplySkillTemplate> {
+  return apiGet<ReplySkillTemplate>("/reply-strategies/default-skill");
 }
 
 export async function createReplyStrategy(payload: ReplyStrategyPayload): Promise<ReplyStrategy> {

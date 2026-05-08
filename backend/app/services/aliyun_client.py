@@ -19,12 +19,17 @@ class AliyunChatOptions:
 
 
 class AliyunChatClient:
-    endpoint = "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions"
-
-    def __init__(self, api_key: str | None = None, timeout: float = 60.0) -> None:
+    def __init__(
+        self,
+        api_key: str | None = None,
+        timeout: float = 60.0,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
         settings = get_settings()
         self.api_key = api_key or settings.aliyun_api_key
         self.timeout = timeout
+        self.endpoint = settings.aliyun_base_url
+        self.transport = transport
 
     async def generate_reply(self, prompt: str, options: AliyunChatOptions) -> str:
         if not self.api_key:
@@ -32,21 +37,24 @@ class AliyunChatClient:
 
         payload: dict[str, Any] = {
             "model": options.model,
-            "messages": [
-                {
-                    "role": "system",
-                    "content": (
-                        "你是游戏开发团队的中文社区运营助手，"
-                        "只输出可直接发送给 Steam 用户的开发者回复。"
-                    ),
-                },
-                {"role": "user", "content": prompt},
-            ],
+            "input": {
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": (
+                            "你是游戏开发团队的中文社区运营助手，"
+                            "只输出可直接发送给 Steam 用户的开发者回复。"
+                        ),
+                    },
+                    {"role": "user", "content": prompt},
+                ]
+            },
+            "parameters": {"result_format": "message"},
         }
         if options.temperature is not None:
-            payload["temperature"] = options.temperature
+            payload["parameters"]["temperature"] = options.temperature
 
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
+        async with httpx.AsyncClient(timeout=self.timeout, transport=self.transport) as client:
             response = await client.post(
                 self.endpoint,
                 headers={
@@ -57,19 +65,30 @@ class AliyunChatClient:
             )
 
         if response.status_code >= 400:
+            detail = _extract_error_message(response)
             raise AliyunClientError(
-                f"Aliyun API failed: HTTP {response.status_code} {response.text}"
+                f"Aliyun API failed: HTTP {response.status_code} {detail}"
             )
 
         data = response.json()
         try:
-            content = data["choices"][0]["message"]["content"]
+            content = data["output"]["choices"][0]["message"]["content"]
         except (KeyError, IndexError, TypeError) as exc:
             raise AliyunClientError(
-                "Aliyun API response missing choices[0].message.content"
+                "Aliyun API response missing output.choices[0].message.content"
             ) from exc
 
         content = str(content).strip()
         if not content:
             raise AliyunClientError("Aliyun API returned empty reply content")
         return content
+
+
+def _extract_error_message(response: httpx.Response) -> str:
+    try:
+        data = response.json()
+    except ValueError:
+        return response.text
+    if isinstance(data, dict):
+        return str(data.get("message") or data.get("code") or response.text)
+    return response.text

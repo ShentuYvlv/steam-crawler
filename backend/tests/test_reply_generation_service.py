@@ -16,6 +16,7 @@ from app.services.reply_generation import ReplyGenerationError, ReplyGenerationS
 class FakeAIClient:
     async def generate_reply(self, prompt: str, options: AliyunChatOptions) -> str:
         assert "这是一条需要认真回复的差评" in prompt
+        assert "Steam 评论 AI 回复 Skill" in prompt
         assert options.model == "qwen-plus"
         return "感谢你的反馈，我们会继续优化相关体验。"
 
@@ -47,6 +48,7 @@ async def test_reply_generation_creates_pending_review_draft() -> None:
     assert result.draft.model_name == "qwen-plus"
     assert result.draft.prompt_snapshot is not None
     assert "策略版本：v1" in result.draft.prompt_snapshot
+    assert "Steam 评论 AI 回复 Skill 文档" in result.draft.prompt_snapshot
     assert stored_review is not None
     assert stored_review.reply_status == "drafted"
 
@@ -121,18 +123,8 @@ async def seed_reply_generation_data(session: AsyncSession) -> SteamReview:
         id=1,
         name="默认策略",
         description="测试策略",
+        skill_content="# 自定义回复 Skill\n\n请先共情，再给出克制回复。",
         prompt_template="请真诚、具体地回复用户。评论：{review_text}",
-        reply_rules="不要争辩，不要承诺具体日期。",
-        forbidden_terms=["亲亲"],
-        good_examples=[
-            {
-                "title": "差评安抚",
-                "review": "剧情不好",
-                "reply": "感谢指出问题，我们会继续优化叙事体验。",
-            }
-        ],
-        brand_voice="真诚、克制、负责。",
-        classification_strategy="差评优先解释和安抚。",
         model_name="qwen-plus",
         temperature=0.3,
         is_active=True,

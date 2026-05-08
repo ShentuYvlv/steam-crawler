@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.error_utils import format_exception_message
 from app.models import ReplyDraft, ReplyStrategy, SteamReview
 from app.services.aliyun_client import AliyunChatClient, AliyunChatOptions
+from app.services.reply_skill import resolve_reply_skill_content
 
 
 class ReplyAIClient(Protocol):
@@ -107,7 +108,9 @@ class ReplyGenerationService:
 
 
 def build_reply_prompt(review: SteamReview, strategy: ReplyStrategy) -> str:
+    skill_content = resolve_reply_skill_content(strategy.skill_content)
     context = {
+        "app_id": review.app_id,
         "review_text": review.review_text or "",
         "sentiment": "好评" if review.voted_up else "差评",
         "playtime_forever": review.playtime_forever,
@@ -118,52 +121,25 @@ def build_reply_prompt(review: SteamReview, strategy: ReplyStrategy) -> str:
         "persona_name": review.persona_name or "",
         "steam_id": review.steam_id or "",
         "recommendation_id": review.recommendation_id,
-        "brand_voice": strategy.brand_voice or "",
-        "reply_rules": strategy.reply_rules or "",
-        "forbidden_terms": "、".join(strategy.forbidden_terms or []),
-        "classification_strategy": strategy.classification_strategy or "",
-        "good_examples": _format_good_examples(strategy.good_examples or []),
     }
-    strategy_prompt = _safe_format(strategy.prompt_template, context)
     return "\n\n".join(
         [
-            "请基于下面的策略和 Steam 用户评论，生成一条中文开发者回复草稿。",
+            "请基于下面的 Steam 评论回复 skill 文档，生成一条中文开发者回复草稿。",
+            "你必须严格遵守 skill 中的角色、原则、判断流程、场景口径和输出要求。",
             f"策略名称：{strategy.name}",
             f"策略版本：v{strategy.version}",
-            f"策略模板：\n{strategy_prompt}",
-            f"品牌语气：\n{context['brand_voice'] or '未配置'}",
-            f"回复规则：\n{context['reply_rules'] or '未配置'}",
-            f"禁止用语：{context['forbidden_terms'] or '未配置'}",
-            f"分类/处理策略：\n{context['classification_strategy'] or '未配置'}",
-            f"优秀示例：\n{context['good_examples'] or '未配置'}",
+            "Steam 评论 AI 回复 Skill 文档：\n" + skill_content,
             "评论信息：\n" + json.dumps(context, ensure_ascii=False, indent=2),
-            "输出要求：只输出最终回复正文；不要输出标题、解释、Markdown 或 JSON。",
-        ]
-    )
-
-
-def _format_good_examples(examples: list[dict]) -> str:
-    lines: list[str] = []
-    for index, example in enumerate(examples, start=1):
-        lines.append(
             "\n".join(
                 [
-                    f"{index}. {example.get('title') or '示例'}",
-                    f"用户评论：{example.get('review') or ''}",
-                    f"开发者回复：{example.get('reply') or ''}",
+                    "输出要求：",
+                    "1. 先在心里完成判断和场景匹配。",
+                    "2. 如果根据 skill 判断应该不回，只输出：",
+                    "【判断：不回】",
+                    "原因：...",
+                    "3. 如果应该回复，只输出最终可发布的中文回复正文。",
+                    "4. 不要输出标题、解释、Markdown 或 JSON。",
                 ]
-            )
-        )
-    return "\n\n".join(lines)
-
-
-def _safe_format(template: str, values: dict[str, object]) -> str:
-    try:
-        return template.format_map(_SafeFormatDict(values))
-    except (KeyError, ValueError):
-        return template
-
-
-class _SafeFormatDict(dict[str, object]):
-    def __missing__(self, key: str) -> str:
-        return "{" + key + "}"
+            ),
+        ]
+    )

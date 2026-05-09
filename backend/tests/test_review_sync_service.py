@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -69,6 +70,24 @@ class EmptyMessageScraper:
 class CancelledScraper:
     async def scrape_app_comments(self, **kwargs):
         raise TaskCancelledError()
+
+    async def close(self) -> None:
+        return None
+
+
+class BlockingScraper:
+    def __init__(self, started: asyncio.Event, release: asyncio.Event) -> None:
+        self.started = started
+        self.release = release
+
+    async def scrape_app_comments(self, **kwargs):
+        self.started.set()
+        await self.release.wait()
+        return {
+            "app_id": kwargs["app_id"],
+            "query_summary": {"total_reviews": 0},
+            "reviews": [],
+        }
 
     async def close(self) -> None:
         return None
@@ -179,3 +198,38 @@ async def test_review_sync_service_marks_task_cancelled() -> None:
     assert result.status == "cancelled"
     assert job.status == "cancelled"
     assert logs[-1].message == "评论同步已取消"
+
+
+async def test_review_sync_service_commits_running_state_before_scrape_finishes() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    started = asyncio.Event()
+    release = asyncio.Event()
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async with session_factory() as session:
+        service = SteamReviewSyncService(
+            session,
+            scraper_factory=lambda: BlockingScraper(started, release),
+        )
+        sync_task = asyncio.create_task(service.sync_reviews(ReviewSyncOptions(app_id=3350200)))
+        await asyncio.wait_for(started.wait(), timeout=2)
+
+        async with session_factory() as inspection_session:
+            job = (await inspection_session.execute(select(SyncJob))).scalar_one()
+            logs = (
+                await inspection_session.execute(select(TaskLog).order_by(TaskLog.id))
+            ).scalars().all()
+
+        assert job.status == "running"
+        assert job.started_at is not None
+        assert len(logs) >= 3
+
+        release.set()
+        result = await sync_task
+
+    await engine.dispose()
+
+    assert result.status == "success"

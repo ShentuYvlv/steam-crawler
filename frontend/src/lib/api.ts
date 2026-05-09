@@ -223,6 +223,8 @@ export type SyncJob = {
   can_cancel: boolean;
 };
 
+export type TaskStatusGroup = "all" | "active" | "terminal";
+
 export type TaskLog = {
   id: number;
   task_id: number;
@@ -471,13 +473,20 @@ export async function fetchTasks(): Promise<SyncJob[]> {
   return apiGet<SyncJob[]>("/tasks");
 }
 
-export async function fetchTasksBySchedule(scheduleId?: number | null, appId?: number | null): Promise<SyncJob[]> {
+export async function fetchTasksBySchedule(
+  scheduleId?: number | null,
+  appId?: number | null,
+  statusGroup?: TaskStatusGroup
+): Promise<SyncJob[]> {
   const params = new URLSearchParams();
   if (scheduleId) {
     params.set("schedule_id", String(scheduleId));
   }
   if (appId) {
     params.set("app_id", String(appId));
+  }
+  if (statusGroup) {
+    params.set("status_group", statusGroup);
   }
   const query = params.toString() ? `?${params.toString()}` : "";
   return apiGet<SyncJob[]>(`/tasks${query}`);

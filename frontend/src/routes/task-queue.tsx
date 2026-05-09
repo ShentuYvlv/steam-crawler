@@ -3,39 +3,60 @@ import { createRoute } from "@tanstack/react-router";
 import { ListOrdered } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import { cancelTask, fetchGames, fetchTaskDetail, fetchTasksBySchedule, type SyncJob } from "@/lib/api";
+import {
+  cancelTask,
+  fetchGames,
+  fetchTaskDetail,
+  fetchTasksBySchedule,
+  type SyncJob,
+  type TaskStatusGroup,
+} from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
 function TaskQueuePage() {
   const queryClient = useQueryClient();
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
-  const tasksQuery = useQuery({
-    queryKey: ["task-queue", selectedAppId ?? "all"],
-    queryFn: () => fetchTasksBySchedule(undefined, selectedAppId),
+  const [selectedStatusGroup, setSelectedStatusGroup] = useState<TaskStatusGroup>("active");
+  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+
+  const activeTasksQuery = useQuery({
+    queryKey: ["task-queue", "active", selectedAppId ?? "all"],
+    queryFn: () => fetchTasksBySchedule(undefined, selectedAppId, "active"),
+    refetchInterval: 5000,
+  });
+  const terminalTasksQuery = useQuery({
+    queryKey: ["task-queue", "terminal", selectedAppId ?? "all"],
+    queryFn: () => fetchTasksBySchedule(undefined, selectedAppId, "terminal"),
     refetchInterval: 5000,
   });
   const gamesQuery = useQuery({
     queryKey: ["games"],
     queryFn: fetchGames,
   });
-  const [selectedTaskId, setSelectedTaskId] = useState<number | null>(null);
+
+  const tasks =
+    selectedStatusGroup === "terminal"
+      ? (terminalTasksQuery.data ?? [])
+      : (activeTasksQuery.data ?? []);
+  const activeTaskCount = activeTasksQuery.data?.length ?? 0;
+  const terminalTaskCount = terminalTasksQuery.data?.length ?? 0;
 
   useEffect(() => {
-    if (!selectedTaskId && (tasksQuery.data?.length ?? 0) > 0) {
-      setSelectedTaskId(tasksQuery.data?.[0]?.id ?? null);
+    if (!selectedTaskId && tasks.length > 0) {
+      setSelectedTaskId(tasks[0]?.id ?? null);
     }
-  }, [selectedTaskId, tasksQuery.data]);
+  }, [selectedTaskId, tasks]);
 
   useEffect(() => {
-    if ((tasksQuery.data?.length ?? 0) === 0) {
+    if (tasks.length === 0) {
       setSelectedTaskId(null);
       return;
     }
-    if (selectedTaskId && tasksQuery.data?.some((task) => task.id === selectedTaskId)) {
+    if (selectedTaskId && tasks.some((task) => task.id === selectedTaskId)) {
       return;
     }
-    setSelectedTaskId(tasksQuery.data?.[0]?.id ?? null);
-  }, [selectedTaskId, tasksQuery.data]);
+    setSelectedTaskId(tasks[0]?.id ?? null);
+  }, [selectedTaskId, tasks]);
 
   const detailQuery = useQuery({
     queryKey: ["task-queue-detail", selectedTaskId],
@@ -64,7 +85,7 @@ function TaskQueuePage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">任务队列</h1>
             <p className="mt-1 text-sm text-slate-500">
-              查看所有异步任务的排队状态、执行结果和任务日志。
+              默认只显示正在运行和排队中的任务。排序规则固定为：执行中、等待探针、排队中、取消中；已结束任务单独归档查看。
             </p>
           </div>
         </div>
@@ -74,8 +95,22 @@ function TaskQueuePage() {
         <div className="app-card p-4">
           <div className="flex flex-col gap-3">
             <h2 className="text-base font-semibold text-slate-950">任务列表</h2>
+            <div className="grid grid-cols-2 gap-2">
+              <StatusGroupButton
+                title="进行中与排队"
+                summary={`${activeTaskCount} 条`}
+                active={selectedStatusGroup === "active"}
+                onClick={() => setSelectedStatusGroup("active")}
+              />
+              <StatusGroupButton
+                title="已结束任务"
+                summary={`${terminalTaskCount} 条`}
+                active={selectedStatusGroup === "terminal"}
+                onClick={() => setSelectedStatusGroup("terminal")}
+              />
+            </div>
             <label className="flex flex-col gap-2 text-sm">
-              <span className="field-label">按监控任务筛选</span>
+              <span className="field-label">按游戏筛选</span>
               <select
                 className="form-input"
                 value={selectedAppId ?? ""}
@@ -93,7 +128,7 @@ function TaskQueuePage() {
             </label>
           </div>
           <div className="mt-4 grid gap-3">
-            {(tasksQuery.data ?? []).map((task) => (
+            {tasks.map((task) => (
               <button
                 key={task.id}
                 type="button"
@@ -111,7 +146,9 @@ function TaskQueuePage() {
                   <span className={statusBadgeClass(task.status)}>{formatTaskStatus(task.status)}</span>
                 </div>
                 <p className="mt-2 text-xs text-slate-500">
-                  {(task.game_name || `App ${task.app_id ?? "-"}`) + " · " + (task.trigger_type === "scheduled" ? "定时触发" : "手动触发")}
+                  {(task.game_name || `App ${task.app_id ?? "-"}`) +
+                    " · " +
+                    (task.trigger_type === "scheduled" ? "定时触发" : "手动触发")}
                 </p>
                 <p className="mt-3 text-sm text-slate-600">
                   新增 {task.inserted_count} / 更新 {task.updated_count} / 跳过 {task.skipped_count}
@@ -122,9 +159,11 @@ function TaskQueuePage() {
                 </div>
               </button>
             ))}
-            {!tasksQuery.isLoading && (tasksQuery.data?.length ?? 0) === 0 ? (
+            {!activeTasksQuery.isLoading && !terminalTasksQuery.isLoading && tasks.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-sm text-slate-500">
-                暂无异步任务。
+                {selectedStatusGroup === "active"
+                  ? "当前没有正在运行或排队中的任务。"
+                  : "当前没有已结束的任务。"}
               </div>
             ) : null}
           </div>
@@ -161,9 +200,15 @@ function TaskQueuePage() {
 
               <div className="mt-5 grid gap-3 md:grid-cols-3">
                 <Metric label="监控任务" value={detailQuery.data.schedule_name ?? "手动同步"} />
-                <Metric label="游戏" value={detailQuery.data.game_name ?? `App ${detailQuery.data.app_id ?? "-"}`} />
+                <Metric
+                  label="游戏"
+                  value={detailQuery.data.game_name ?? `App ${detailQuery.data.app_id ?? "-"}`}
+                />
                 <Metric label="App ID" value={String(detailQuery.data.app_id ?? "-")} />
-                <Metric label="触发方式" value={detailQuery.data.trigger_type === "scheduled" ? "定时" : "手动"} />
+                <Metric
+                  label="触发方式"
+                  value={detailQuery.data.trigger_type === "scheduled" ? "定时" : "手动"}
+                />
                 <Metric label="请求规模" value={String(detailQuery.data.requested_limit ?? "-")} />
                 <Metric label="开始时间" value={formatDateTimeNullable(detailQuery.data.started_at)} />
                 <Metric label="结束时间" value={formatDateTimeNullable(detailQuery.data.finished_at)} />
@@ -216,6 +261,33 @@ function TaskQueuePage() {
   );
 }
 
+function StatusGroupButton({
+  title,
+  summary,
+  active,
+  onClick,
+}: {
+  title: string;
+  summary: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-2xl border px-4 py-3 text-left transition ${
+        active
+          ? "border-blue-200 bg-blue-50 text-blue-700 shadow-sm"
+          : "border-slate-200 bg-slate-50/70 text-slate-600 hover:border-blue-200 hover:bg-blue-50/40"
+      }`}
+    >
+      <p className="text-sm font-semibold">{title}</p>
+      <p className="mt-1 text-xs opacity-80">{summary}</p>
+    </button>
+  );
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -252,7 +324,7 @@ function statusBadgeClass(status: string) {
   if (status === "failed") {
     return "badge-red";
   }
-  if (status === "waiting" || status === "cancel_requested") {
+  if (status === "waiting" || status === "cancel_requested" || status === "partial_success") {
     return "badge-orange";
   }
   if (status === "cancelled") {
@@ -260,9 +332,6 @@ function statusBadgeClass(status: string) {
   }
   if (status === "success") {
     return "badge-green";
-  }
-  if (status === "partial_success") {
-    return "badge-orange";
   }
   return "badge-blue";
 }

@@ -85,6 +85,8 @@ class SteamReviewSyncService:
                 raise ValueError(f"Sync job not found: {options.sync_job_id}")
             sync_job.status = "running"
             sync_job.started_at = datetime.now(tz=CHINA_TZ)
+            sync_job.finished_at = None
+            sync_job.error_message = None
         else:
             sync_job = SyncJob(
                 schedule_id=options.schedule_id,
@@ -139,6 +141,8 @@ class SteamReviewSyncService:
                 **(await get_steam_rate_limiter().snapshot()),
             },
         )
+
+        await self.session.commit()
 
         try:
             await self._raise_if_cancelled(sync_job)

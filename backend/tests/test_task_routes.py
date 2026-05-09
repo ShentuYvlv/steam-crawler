@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from datetime import UTC, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -238,3 +239,92 @@ async def test_task_detail_settles_orphaned_cancel_requested_task() -> None:
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
     assert response.json()["can_cancel"] is False
+
+
+async def test_task_list_sorts_active_first_and_supports_status_group_filter() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    now = datetime.now(tz=UTC)
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        seed_session.add_all(
+            [
+                SyncJob(
+                    app_id=1001,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="success",
+                    created_at=now - timedelta(minutes=30),
+                    finished_at=now - timedelta(minutes=20),
+                ),
+                SyncJob(
+                    app_id=1002,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="pending",
+                    created_at=now - timedelta(minutes=10),
+                ),
+                SyncJob(
+                    app_id=1003,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="waiting",
+                    created_at=now - timedelta(minutes=9),
+                ),
+                SyncJob(
+                    app_id=1004,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="running",
+                    created_at=now - timedelta(minutes=8),
+                    started_at=now - timedelta(minutes=7),
+                ),
+                SyncJob(
+                    app_id=1005,
+                    job_type="steam_review_sync",
+                    source_type="steam_api",
+                    status="cancelled",
+                    created_at=now - timedelta(minutes=6),
+                    finished_at=now - timedelta(minutes=5),
+                ),
+            ]
+        )
+        await seed_session.commit()
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            all_response = await client.get("/api/tasks")
+            active_response = await client.get("/api/tasks?status_group=active")
+            terminal_response = await client.get("/api/tasks?status_group=terminal")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert all_response.status_code == 200
+    assert [item["status"] for item in all_response.json()] == [
+        "running",
+        "waiting",
+        "pending",
+        "success",
+        "cancelled",
+    ]
+
+    assert active_response.status_code == 200
+    assert [item["status"] for item in active_response.json()] == [
+        "running",
+        "waiting",
+        "pending",
+    ]
+
+    assert terminal_response.status_code == 200
+    assert [item["status"] for item in terminal_response.json()] == [
+        "success",
+        "cancelled",
+    ]

@@ -1,7 +1,7 @@
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
-from sqlalchemy import desc, select
+from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
@@ -37,6 +37,32 @@ from app.services.task_runtime import (
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
+ActiveTaskGroup = Literal["all", "active", "terminal"]
+
+ACTIVE_TASK_STATUSES = ("running", "waiting", "pending", "cancel_requested")
+TERMINAL_TASK_STATUSES = ("failed", "partial_success", "success", "cancelled")
+
+
+def _task_status_priority():
+    return case(
+        (SyncJob.status == "running", 0),
+        (SyncJob.status == "waiting", 1),
+        (SyncJob.status == "pending", 2),
+        (SyncJob.status == "cancel_requested", 3),
+        (SyncJob.status == "failed", 4),
+        (SyncJob.status == "partial_success", 5),
+        (SyncJob.status == "success", 6),
+        (SyncJob.status == "cancelled", 7),
+        else_=99,
+    )
+
+
+def _task_sort_timestamp():
+    return func.coalesce(
+        SyncJob.started_at,
+        SyncJob.finished_at,
+        SyncJob.created_at,
+    )
 
 
 @router.get("", response_model=list[SyncJobListItem])
@@ -45,6 +71,7 @@ async def list_tasks(
     limit: int = Query(default=50, gt=0, le=200),
     schedule_id: int | None = Query(default=None, gt=0),
     app_id: int | None = Query(default=None, gt=0),
+    status_group: ActiveTaskGroup = Query(default="all"),
 ) -> list[SyncJobListItem]:
     statement = select(SyncJob, SteamGame.name).outerjoin(
         SteamGame,
@@ -54,8 +81,19 @@ async def list_tasks(
         statement = statement.where(SyncJob.schedule_id == schedule_id)
     if app_id is not None:
         statement = statement.where(SyncJob.app_id == app_id)
+    if status_group == "active":
+        statement = statement.where(SyncJob.status.in_(ACTIVE_TASK_STATUSES))
+    elif status_group == "terminal":
+        statement = statement.where(SyncJob.status.in_(TERMINAL_TASK_STATUSES))
     result = await session.execute(
-        statement.order_by(desc(SyncJob.created_at), desc(SyncJob.id)).limit(limit)
+        statement
+        .order_by(
+            _task_status_priority(),
+            desc(_task_sort_timestamp()),
+            desc(SyncJob.created_at),
+            desc(SyncJob.id),
+        )
+        .limit(limit)
     )
     items: list[dict] = []
     for job, game_name in result.all():

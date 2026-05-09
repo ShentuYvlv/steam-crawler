@@ -92,6 +92,14 @@ class TaskScheduler:
                 await session.commit()
                 await session.refresh(sync_job)
 
+                schedule_options = schedule.options or {}
+                language = str(schedule_options.get("language") or "schinese")
+                filter_type = str(schedule_options.get("filter") or "recent")
+                review_type = str(schedule_options.get("review_type") or "all")
+                purchase_type = str(schedule_options.get("purchase_type") or "all")
+                use_review_quality = bool(schedule_options.get("use_review_quality", True))
+                per_page = int(schedule_options.get("per_page") or 100)
+
                 cancel_event = register_cancel_event(sync_job.id)
                 try:
                     async with get_steam_sync_lock():
@@ -113,6 +121,12 @@ class TaskScheduler:
                                     session,
                                     sync_job,
                                     cancel_event=cancel_event,
+                                    app_id=schedule.app_id,
+                                    language=language,
+                                    filter_type=filter_type,
+                                    review_type=review_type,
+                                    purchase_type=purchase_type,
+                                    use_review_quality=use_review_quality,
                                 )
                             except TaskCancelledError:
                                 await session.refresh(sync_job)
@@ -134,26 +148,12 @@ class TaskScheduler:
                                         schedule_name=schedule.name,
                                         trigger_type="scheduled",
                                         limit=None,
-                                        language=str(
-                                            (schedule.options or {}).get("language") or "schinese"
-                                        ),
-                                        filter=str(
-                                            (schedule.options or {}).get("filter") or "recent"
-                                        ),
-                                        review_type=str(
-                                            (schedule.options or {}).get("review_type") or "all"
-                                        ),
-                                        purchase_type=str(
-                                            (schedule.options or {}).get("purchase_type") or "all"
-                                        ),
-                                        use_review_quality=bool(
-                                            (schedule.options or {}).get(
-                                                "use_review_quality", True
-                                            )
-                                        ),
-                                        per_page=int(
-                                            (schedule.options or {}).get("per_page") or 100
-                                        ),
+                                        language=language,
+                                        filter=filter_type,
+                                        review_type=review_type,
+                                        purchase_type=purchase_type,
+                                        use_review_quality=use_review_quality,
+                                        per_page=per_page,
                                         sync_job_id=sync_job.id,
                                     )
                                 )

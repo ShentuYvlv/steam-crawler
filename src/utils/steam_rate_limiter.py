@@ -9,6 +9,7 @@ from typing import Any
 
 import httpx
 
+from src.config import get_config
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 ProbeCallback = Callable[[dict[str, Any]], Awaitable[None]]
@@ -45,8 +46,13 @@ class SteamRateLimiter:
                         return self._snapshot_locked(now)
             await _sleep_with_cancel(wait_time, stop_event)
 
-    async def record_success(self) -> None:
+    async def record_success(self, *, reset_failures: bool = False) -> None:
         async with self._lock:
+            if reset_failures:
+                self._failure_streak = 0
+                self._cooldown_until = 0.0
+                self._consecutive_successes = 1
+                return
             self._consecutive_successes += 1
             if self._consecutive_successes >= 3 and self._failure_streak > 0:
                 self._failure_streak -= 1
@@ -112,7 +118,7 @@ class SteamRateLimiter:
                     "Chrome/91.0.4472.124 Safari/537.36"
                 )
             },
-            timeout=httpx.Timeout(20.0),
+            timeout=httpx.Timeout(self._probe_timeout_seconds()),
             verify=False,
         ) as client:
             try:
@@ -132,7 +138,7 @@ class SteamRateLimiter:
                     raise httpx.RemoteProtocolError(
                         f"Steam probe success flag invalid: {payload.get('success')}"
                     )
-                await self.record_success()
+                await self.record_success(reset_failures=True)
                 async with self._lock:
                     self._last_probe_at = now
                     self._last_probe_error = None
@@ -223,6 +229,9 @@ class SteamRateLimiter:
         if isinstance(exc, SteamTemporarilyUnavailableError):
             return True
         return False
+
+    def _probe_timeout_seconds(self) -> float:
+        return max(20.0, float(get_config().http.timeout))
 
     def _build_probe_params(
         self,

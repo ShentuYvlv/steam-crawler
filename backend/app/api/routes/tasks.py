@@ -4,6 +4,8 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, R
 from sqlalchemy import case, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from src.utils.oxylabs_diagnostics import fetch_proxy_location
+from src.utils.oxylabs_proxy import load_oxylabs_proxy_settings
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 from app.core.database import AsyncSessionLocal, get_session
@@ -11,6 +13,7 @@ from app.core.error_utils import format_exception_details, format_exception_mess
 from app.core.security import RequireOperator
 from app.models import SteamGame, SyncJob, TaskLog, TaskSchedule
 from app.schemas import (
+    ProxyStatusResponse,
     ReviewSyncRequest,
     SyncJobListItem,
     SyncJobWithLogsResponse,
@@ -105,6 +108,22 @@ async def list_tasks(
         items.append(payload)
     await session.commit()
     return items
+
+
+@router.get("/proxy-status", response_model=ProxyStatusResponse)
+async def get_proxy_status() -> ProxyStatusResponse:
+    settings = load_oxylabs_proxy_settings()
+    sticky_port = settings.choose_sticky_session_port() if settings.enabled else None
+    scraping = await fetch_proxy_location("rotate_per_request")
+    sending = await fetch_proxy_location("sticky_session", session_port=sticky_port)
+    return ProxyStatusResponse(
+        enabled=settings.enabled,
+        host=settings.host,
+        scheme=settings.scheme,
+        direct_fallback=settings.direct_fallback,
+        scraping=scraping,
+        sending=sending,
+    )
 
 
 @router.post("/reviews-sync", response_model=SyncJobListItem, status_code=202)

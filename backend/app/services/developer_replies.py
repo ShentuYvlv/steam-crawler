@@ -26,6 +26,8 @@ class SteamDeveloperReplyClient(Protocol):
         response_text: str,
     ) -> dict[str, Any]: ...
 
+    async def get_transport_diagnostics(self) -> dict[str, Any]: ...
+
     async def close(self) -> None: ...
 
 
@@ -43,6 +45,7 @@ class DeveloperReplyService:
     ) -> None:
         self.session = session
         self.client_factory = client_factory or create_steam_reply_client
+        self.last_transport_diagnostics: dict[str, Any] | None = None
 
     async def send_reply(
         self,
@@ -148,6 +151,9 @@ class DeveloperReplyService:
         client: SteamDeveloperReplyClient | None = None
         try:
             client = self.client_factory()
+            diagnostics_getter = getattr(client, "get_transport_diagnostics", None)
+            if callable(diagnostics_getter):
+                self.last_transport_diagnostics = await diagnostics_getter()
             steam_result = await client.set_developer_response(
                 recommendation_id=review.recommendation_id,
                 response_text=record.content,

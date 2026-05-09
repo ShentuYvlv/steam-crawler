@@ -36,6 +36,7 @@ from app.schemas.reply_strategies import (
     ReplyStrategyUpdate,
 )
 from app.schemas.review_sync import (
+    ProxyStatusResponse,
     ReviewSyncRequest,
     ReviewSyncResponse,
     SyncJobDetailResponse,
@@ -69,6 +70,7 @@ __all__ = [
     "GameUpdateRequest",
     "LoginRequest",
     "LoginResponse",
+    "ProxyStatusResponse",
     "ReviewDetailResponse",
     "ReplyDraftAuditListItem",
     "ReplyDraftResponse",

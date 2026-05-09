@@ -449,3 +449,46 @@ async def test_manual_task_runner_waits_for_probe_only_after_real_sync_failure(m
 
     assert sync_calls == 2
     assert wait_calls == 1
+
+
+async def test_proxy_status_route_returns_scraping_and_sending_diagnostics(monkeypatch) -> None:
+    import app.api.routes.tasks as tasks_module
+
+    class FakeSettings:
+        enabled = True
+        host = "dc.oxylabs.io"
+        scheme = "https"
+        direct_fallback = True
+
+        def choose_sticky_session_port(self) -> int:
+            return 35467
+
+    async def fake_fetch_proxy_location(proxy_mode: str, *, session_port=None, **kwargs):
+        return {
+            "proxy_enabled": True,
+            "proxy_mode": proxy_mode,
+            "proxy_port_type": "sticky_session" if proxy_mode == "sticky_session" else "rotating",
+            "proxy_port": session_port if proxy_mode == "sticky_session" else 8000,
+            "proxy_fallback_enabled": True,
+            "proxy_fallback_used": False,
+            "proxy_error": None,
+            "ok": True,
+            "exact_ip": proxy_mode == "sticky_session",
+            "note": "test note",
+            "location": {"ip": "1.2.3.4"},
+        }
+
+    monkeypatch.setattr(tasks_module, "load_oxylabs_proxy_settings", lambda: FakeSettings())
+    monkeypatch.setattr(tasks_module, "fetch_proxy_location", fake_fetch_proxy_location)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/tasks/proxy-status")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["enabled"] is True
+    assert payload["host"] == "dc.oxylabs.io"
+    assert payload["scraping"]["proxy_mode"] == "rotate_per_request"
+    assert payload["scraping"]["proxy_port"] == 8000
+    assert payload["sending"]["proxy_mode"] == "sticky_session"
+    assert payload["sending"]["proxy_port"] == 35467

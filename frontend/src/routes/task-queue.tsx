@@ -6,8 +6,10 @@ import { useEffect, useState } from "react";
 import {
   cancelTask,
   fetchGames,
+  fetchProxyStatus,
   fetchTaskDetail,
   fetchTasksBySchedule,
+  type ProxyModeStatus,
   type SyncJob,
   type TaskStatusGroup,
 } from "@/lib/api";
@@ -63,6 +65,11 @@ function TaskQueuePage() {
     queryFn: () => fetchTaskDetail(selectedTaskId as number),
     enabled: selectedTaskId !== null,
     refetchInterval: 5000,
+  });
+  const proxyStatusQuery = useQuery({
+    queryKey: ["task-proxy-status"],
+    queryFn: fetchProxyStatus,
+    refetchInterval: 15000,
   });
   const cancelMutation = useMutation({
     mutationFn: (taskId: number) => cancelTask(taskId),
@@ -214,6 +221,30 @@ function TaskQueuePage() {
                 <Metric label="结束时间" value={formatDateTimeNullable(detailQuery.data.finished_at)} />
               </div>
 
+              <div className="mt-6">
+                <h3 className="text-base font-semibold text-slate-950">代理状态</h3>
+                {proxyStatusQuery.data ? (
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <ProxyModeCard
+                      title="抓取链"
+                      mode={proxyStatusQuery.data.scraping}
+                      host={proxyStatusQuery.data.host}
+                      scheme={proxyStatusQuery.data.scheme}
+                    />
+                    <ProxyModeCard
+                      title="发送链"
+                      mode={proxyStatusQuery.data.sending}
+                      host={proxyStatusQuery.data.host}
+                      scheme={proxyStatusQuery.data.scheme}
+                    />
+                  </div>
+                ) : (
+                  <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-500">
+                    正在获取代理状态...
+                  </div>
+                )}
+              </div>
+
               {detailQuery.data.error_message ? (
                 <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50/70 p-4 text-sm text-rose-700">
                   {detailQuery.data.error_message}
@@ -235,6 +266,11 @@ function TaskQueuePage() {
                         <time className="text-xs text-slate-400">{formatDateTime(log.created_at)}</time>
                       </div>
                       <p className="mt-3 text-sm font-medium text-slate-800">{log.message}</p>
+                      {extractTransportSummary(log.details) ? (
+                        <div className="mt-3 rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-xs text-emerald-800">
+                          {extractTransportSummary(log.details)}
+                        </div>
+                      ) : null}
                       {log.details ? (
                         <pre className="mt-3 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 text-xs text-slate-600">
                           {JSON.stringify(log.details, null, 2)}
@@ -297,6 +333,52 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function ProxyModeCard({
+  title,
+  mode,
+  host,
+  scheme,
+}: {
+  title: string;
+  mode: ProxyModeStatus;
+  host: string;
+  scheme: string;
+}) {
+  const location = (mode.location ?? {}) as Record<string, unknown>;
+  const ip = typeof location.ip === "string" ? location.ip : "—";
+  const providers =
+    location.providers && typeof location.providers === "object"
+      ? (location.providers as Record<string, unknown>)
+      : null;
+  const dbip =
+    providers?.dbip && typeof providers.dbip === "object"
+      ? (providers.dbip as Record<string, unknown>)
+      : null;
+  const country = typeof dbip?.country === "string" ? dbip.country : "—";
+  const city = typeof dbip?.city === "string" ? dbip.city : "—";
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-sm font-semibold text-slate-950">{title}</p>
+        <span className={mode.ok ? "badge-green" : "badge-orange"}>
+          {mode.proxy_enabled ? (mode.ok ? "可用" : "异常") : "未启用"}
+        </span>
+      </div>
+      <div className="mt-3 space-y-2 text-sm text-slate-600">
+        <p>模式：{mode.proxy_mode}</p>
+        <p>入口：{scheme}://{host}:{mode.proxy_port ?? "—"}</p>
+        <p>IP：{ip}</p>
+        <p>地区：{country} / {city}</p>
+        <p>说明：{mode.exact_ip ? "精确会话 IP" : "示例诊断 IP"}</p>
+        <p>回退：{mode.proxy_fallback_enabled ? "允许直连回退" : "仅代理"}</p>
+        {mode.proxy_error ? <p className="text-rose-600">错误：{mode.proxy_error}</p> : null}
+      </div>
+      <p className="mt-3 text-xs leading-5 text-slate-500">{mode.note}</p>
+    </div>
+  );
+}
+
 function formatTaskType(value: string) {
   const mapping: Record<string, string> = {
     steam_review_sync: "Steam 评论同步",
@@ -345,6 +427,29 @@ function formatDateTimeNullable(value: string | null) {
     return "—";
   }
   return formatDateTime(value);
+}
+
+function extractTransportSummary(details: Record<string, unknown> | null) {
+  if (!details) {
+    return null;
+  }
+  const candidate =
+    details.transport && typeof details.transport === "object"
+      ? (details.transport as Record<string, unknown>)
+      : details;
+  const location =
+    candidate.location && typeof candidate.location === "object"
+      ? (candidate.location as Record<string, unknown>)
+      : null;
+  const ip = location && typeof location.ip === "string" ? location.ip : null;
+  const port = typeof candidate.proxy_port === "number" ? candidate.proxy_port : null;
+  const exact = typeof candidate.exact_ip === "boolean" ? candidate.exact_ip : null;
+  if (!ip && port === null) {
+    return null;
+  }
+  return `代理 ${candidate.proxy_mode ?? "unknown"} · 端口 ${port ?? "—"} · IP ${ip ?? "—"} · ${
+    exact ? "精确会话 IP" : "示例诊断 IP"
+  }`;
 }
 
 export const taskQueueRoute = createRoute({

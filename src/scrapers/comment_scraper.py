@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 from src.config import Config, get_config
+from src.utils.oxylabs_diagnostics import fetch_proxy_location
 from src.utils.oxylabs_proxy import build_proxy_log_fields
 from src.utils.steam_rate_limiter import get_steam_rate_limiter
 from src.utils.steam_reviews_api import build_ajaxappreviews_params
@@ -46,6 +47,7 @@ class CommentScraper:
         )
         self.ui = ui_manager
         self.stop_event = stop_event
+        self._transport_diagnostics = build_proxy_log_fields("rotate_per_request")
 
     def _build_params(
         self,
@@ -105,6 +107,20 @@ class CommentScraper:
                 use_review_quality=use_review_quality,
             )
             data = await self.client.get_json(url, params=params)
+            if not self._transport_diagnostics.get("location"):
+                self._transport_diagnostics = {
+                    **self.client.get_last_request_metadata(),
+                    **(
+                        await fetch_proxy_location("rotate_per_request")
+                        if self.client.get_last_request_metadata().get("proxy_enabled")
+                        else {}
+                    ),
+                }
+            else:
+                self._transport_diagnostics = {
+                    **self._transport_diagnostics,
+                    **self.client.get_last_request_metadata(),
+                }
 
             if data.get("success") != 1:
                 raise RuntimeError(f"Steam comments API returned success={data.get('success')}")
@@ -187,4 +203,4 @@ class CommentScraper:
         await self.client.close()
 
     def get_transport_diagnostics(self) -> dict[str, Any]:
-        return self.client.get_last_request_metadata() or build_proxy_log_fields("rotate_per_request")
+        return self._transport_diagnostics

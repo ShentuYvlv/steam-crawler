@@ -66,3 +66,26 @@ class TaskLogResponse(BaseModel):
 
 class SyncJobWithLogsResponse(SyncJobDetailResponse):
     logs: list[TaskLogResponse] = Field(default_factory=list)
+
+
+class ProxyModeStatusResponse(BaseModel):
+    proxy_enabled: bool
+    proxy_mode: str
+    proxy_port_type: str
+    proxy_port: int | None = None
+    proxy_fallback_enabled: bool
+    proxy_fallback_used: bool = False
+    proxy_error: str | None = None
+    ok: bool
+    exact_ip: bool
+    note: str
+    location: dict[str, Any] | None = None
+
+
+class ProxyStatusResponse(BaseModel):
+    enabled: bool
+    host: str
+    scheme: str
+    direct_fallback: bool
+    scraping: ProxyModeStatusResponse
+    sending: ProxyModeStatusResponse

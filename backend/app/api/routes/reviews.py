@@ -452,7 +452,12 @@ async def _send_replies_in_background(
                             sent_by_user_id=sent_by_user_id,
                         )
                         inserted += 1
-                        await add_task_log(session, task_id, f"评论 {review_id} 回复发送成功")
+                        await add_task_log(
+                            session,
+                            task_id,
+                            f"评论 {review_id} 回复发送成功",
+                            details=service.last_transport_diagnostics,
+                        )
                     except DeveloperReplyError as exc:
                         skipped += 1
                         await add_task_log(
@@ -460,7 +465,10 @@ async def _send_replies_in_background(
                             task_id,
                             f"评论 {review_id} 回复发送失败",
                             level="error",
-                            details=format_exception_details(exc),
+                            details={
+                                **format_exception_details(exc),
+                                "transport": service.last_transport_diagnostics,
+                            },
                         )
                         continue
                 task.inserted_count = inserted

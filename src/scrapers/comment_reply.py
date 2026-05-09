@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from src.config import Config, get_config
+from src.utils.oxylabs_diagnostics import fetch_proxy_location
 from src.utils.oxylabs_proxy import (
     build_proxy_log_fields,
     load_oxylabs_proxy_settings,
@@ -56,6 +57,7 @@ class DeveloperReplyClient:
         self._proxy_client: httpx.AsyncClient | None = None
         self._proxy_session_port = proxy_session_port
         self._last_request_metadata = build_proxy_log_fields("sticky_session")
+        self._proxy_location_cache: dict[str, Any] | None = None
 
     def _build_headers(self) -> dict[str, str]:
         return {
@@ -160,6 +162,23 @@ class DeveloperReplyClient:
 
     def get_last_request_metadata(self) -> dict[str, Any]:
         return dict(self._last_request_metadata)
+
+    async def get_transport_diagnostics(self) -> dict[str, Any]:
+        if self._proxy_location_cache is None:
+            settings = load_oxylabs_proxy_settings()
+            if settings.is_active_for_mode("sticky_session"):
+                proxy_client = await self._get_proxy_client()
+                self._proxy_location_cache = await fetch_proxy_location(
+                    "sticky_session",
+                    session_port=self._proxy_session_port,
+                    existing_client=proxy_client,
+                )
+            else:
+                self._proxy_location_cache = build_proxy_log_fields("sticky_session")
+        return {
+            **self._last_request_metadata,
+            **self._proxy_location_cache,
+        }
 
     @property
     def proxy_session_port(self) -> int | None:

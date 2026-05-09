@@ -234,6 +234,29 @@ export type TaskLog = {
   created_at: string;
 };
 
+export type ProxyModeStatus = {
+  proxy_enabled: boolean;
+  proxy_mode: string;
+  proxy_port_type: string;
+  proxy_port: number | null;
+  proxy_fallback_enabled: boolean;
+  proxy_fallback_used: boolean;
+  proxy_error: string | null;
+  ok: boolean;
+  exact_ip: boolean;
+  note: string;
+  location: Record<string, unknown> | null;
+};
+
+export type ProxyStatus = {
+  enabled: boolean;
+  host: string;
+  scheme: string;
+  direct_fallback: boolean;
+  scraping: ProxyModeStatus;
+  sending: ProxyModeStatus;
+};
+
 export type SyncJobDetail = SyncJob & {
   error_message: string | null;
   updated_at: string;
@@ -523,6 +546,10 @@ export async function fetchTasksBySchedule(
 
 export async function fetchTaskDetail(taskId: number): Promise<SyncJobDetail> {
   return apiGet<SyncJobDetail>(`/tasks/${taskId}`);
+}
+
+export async function fetchProxyStatus(): Promise<ProxyStatus> {
+  return apiGet<ProxyStatus>("/tasks/proxy-status");
 }
 
 export async function cancelTask(taskId: number): Promise<SyncJob> {

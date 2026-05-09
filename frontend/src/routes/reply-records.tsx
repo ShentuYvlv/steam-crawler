@@ -286,6 +286,17 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
     },
   });
 
+  const refreshReplyState = () => {
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+    };
+    refresh();
+    window.setTimeout(refresh, 2000);
+    window.setTimeout(refresh, 5000);
+  };
+
   const sendMutation = useMutation({
     mutationFn: async () =>
       sendReviewReply(item.review_id, {
@@ -294,14 +305,10 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
         confirmed: true,
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
-      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
-      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      refreshReplyState();
     },
     onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
-      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
-      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      refreshReplyState();
     },
   });
 

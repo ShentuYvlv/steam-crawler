@@ -69,6 +69,8 @@ const replyStatusText: Record<string, string> = {
 
 replyStatusText.sending = "鍙戦€佷腑";
 
+replyStatusText.sending = "Sending";
+
 function ReviewsPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<ReviewQuery>(() => ({
@@ -869,6 +871,17 @@ function ReplyDraftAuditPanel({
       void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
     }
   });
+  const refreshReplyState = () => {
+    const refresh = () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+    };
+    refresh();
+    window.setTimeout(refresh, 2000);
+    window.setTimeout(refresh, 5000);
+  };
   const sendMutation = useMutation({
     mutationFn: () =>
       sendReviewReply(review.id, {
@@ -877,16 +890,10 @@ function ReplyDraftAuditPanel({
         confirmed: true
       }),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
-      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
-      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
-      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+      refreshReplyState();
     },
     onError: () => {
-      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
-      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
-      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
-      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+      refreshReplyState();
     }
   });
   const rejectMutation = useMutation({
@@ -945,9 +952,14 @@ function ReplyDraftAuditPanel({
         </div>
       ) : null}
 
-      {review.reply_status === "sending" ? (
+      {false ? (
         <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
           褰撳墠鍥炲姝ｅ湪鍚庡彴鍙戦€侊紝璇风瓑寰呯姸鎬佸埛鏂帮紝涓嶈閲嶅鐐瑰嚮銆?
+        </div>
+      ) : null}
+      {review.reply_status === "sending" ? (
+        <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
+          Reply is being sent in the background. Wait for the status to refresh before trying again.
         </div>
       ) : null}
       <textarea

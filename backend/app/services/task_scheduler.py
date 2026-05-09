@@ -103,6 +103,7 @@ class TaskScheduler:
                 cancel_event = register_cancel_event(sync_job.id)
                 try:
                     async with get_steam_sync_lock():
+                        should_wait_for_probe = False
                         while True:
                             await session.refresh(sync_job)
                             if sync_job.status == "cancelled":
@@ -116,28 +117,30 @@ class TaskScheduler:
                                 )
                                 await session.commit()
                                 break
-                            try:
-                                await wait_for_steam_availability(
-                                    session,
-                                    sync_job,
-                                    cancel_event=cancel_event,
-                                    app_id=schedule.app_id,
-                                    language=language,
-                                    filter_type=filter_type,
-                                    review_type=review_type,
-                                    purchase_type=purchase_type,
-                                    use_review_quality=use_review_quality,
-                                )
-                            except TaskCancelledError:
-                                await session.refresh(sync_job)
-                                await finalize_cancelled_task(
-                                    session,
-                                    sync_job,
-                                    message="任务已取消",
-                                    details={"reason": "cancelled_during_probe_wait"},
-                                )
-                                await session.commit()
-                                break
+                            if should_wait_for_probe:
+                                try:
+                                    await wait_for_steam_availability(
+                                        session,
+                                        sync_job,
+                                        cancel_event=cancel_event,
+                                        app_id=schedule.app_id,
+                                        language=language,
+                                        filter_type=filter_type,
+                                        review_type=review_type,
+                                        purchase_type=purchase_type,
+                                        use_review_quality=use_review_quality,
+                                    )
+                                except TaskCancelledError:
+                                    await session.refresh(sync_job)
+                                    await finalize_cancelled_task(
+                                        session,
+                                        sync_job,
+                                        message="任务已取消",
+                                        details={"reason": "cancelled_during_probe_wait"},
+                                    )
+                                    await session.commit()
+                                    break
+                                should_wait_for_probe = False
 
                             service = SteamReviewSyncService(session, cancel_event=cancel_event)
                             try:
@@ -158,6 +161,7 @@ class TaskScheduler:
                                     )
                                 )
                             except SteamTemporarilyUnavailableError:
+                                should_wait_for_probe = True
                                 continue
                             if result.status in {"success", "partial_success", "cancelled"}:
                                 break

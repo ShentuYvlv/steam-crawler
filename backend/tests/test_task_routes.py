@@ -3,11 +3,14 @@ from datetime import UTC, datetime, timedelta
 
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from src.utils.task_control import SteamTemporarilyUnavailableError
 
 from app.core.database import get_session
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models import Base, SyncJob, TaskSchedule, User
+from app.schemas import ReviewSyncRequest
+from app.services.review_sync import ReviewSyncResult
 
 
 async def test_task_schedule_routes_and_task_filtering(monkeypatch) -> None:
@@ -328,3 +331,121 @@ async def test_task_list_sorts_active_first_and_supports_status_group_filter() -
         "success",
         "cancelled",
     ]
+
+
+async def test_manual_task_runner_attempts_sync_before_probe(monkeypatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        seed_session.add(
+            SyncJob(
+                app_id=998940,
+                job_type="steam_review_sync",
+                source_type="steam_api",
+                status="pending",
+            )
+        )
+        await seed_session.commit()
+
+    import app.api.routes.tasks as tasks_module
+
+    wait_calls = 0
+    sync_calls = 0
+
+    async def fake_wait_for_steam_availability(*args, **kwargs):
+        nonlocal wait_calls
+        wait_calls += 1
+
+    class FakeSteamReviewSyncService:
+        def __init__(self, session, *, cancel_event=None) -> None:
+            self.session = session
+
+        async def sync_reviews(self, options):
+            nonlocal sync_calls
+            sync_calls += 1
+            return ReviewSyncResult(
+                sync_job_id=1,
+                app_id=options.app_id,
+                inserted=0,
+                updated=0,
+                skipped=0,
+                status="success",
+                query_summary={},
+            )
+
+    monkeypatch.setattr(tasks_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(tasks_module, "wait_for_steam_availability", fake_wait_for_steam_availability)
+    monkeypatch.setattr(tasks_module, "SteamReviewSyncService", FakeSteamReviewSyncService)
+
+    await tasks_module._run_review_sync_job(
+        1,
+        ReviewSyncRequest(app_id=998940, language="schinese", filter="recent"),
+    )
+
+    await engine.dispose()
+
+    assert sync_calls == 1
+    assert wait_calls == 0
+
+
+async def test_manual_task_runner_waits_for_probe_only_after_real_sync_failure(monkeypatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        seed_session.add(
+            SyncJob(
+                app_id=998940,
+                job_type="steam_review_sync",
+                source_type="steam_api",
+                status="pending",
+            )
+        )
+        await seed_session.commit()
+
+    import app.api.routes.tasks as tasks_module
+
+    wait_calls = 0
+    sync_calls = 0
+
+    async def fake_wait_for_steam_availability(*args, **kwargs):
+        nonlocal wait_calls
+        wait_calls += 1
+
+    class FakeSteamReviewSyncService:
+        def __init__(self, session, *, cancel_event=None) -> None:
+            self.session = session
+
+        async def sync_reviews(self, options):
+            nonlocal sync_calls
+            sync_calls += 1
+            if sync_calls == 1:
+                raise SteamTemporarilyUnavailableError("steam unavailable")
+            return ReviewSyncResult(
+                sync_job_id=1,
+                app_id=options.app_id,
+                inserted=0,
+                updated=0,
+                skipped=0,
+                status="success",
+                query_summary={},
+            )
+
+    monkeypatch.setattr(tasks_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(tasks_module, "wait_for_steam_availability", fake_wait_for_steam_availability)
+    monkeypatch.setattr(tasks_module, "SteamReviewSyncService", FakeSteamReviewSyncService)
+
+    await tasks_module._run_review_sync_job(
+        1,
+        ReviewSyncRequest(app_id=998940, language="schinese", filter="recent"),
+    )
+
+    await engine.dispose()
+
+    assert sync_calls == 2
+    assert wait_calls == 1

@@ -315,6 +315,7 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
                     schedule_name = schedule.name if schedule is not None else None
 
                 async with get_steam_sync_lock():
+                    should_wait_for_probe = False
                     while True:
                         task = await session.get(SyncJob, sync_job_id)
                         if task is None:
@@ -330,28 +331,30 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
                             )
                             await session.commit()
                             return
-                        try:
-                            await wait_for_steam_availability(
-                                session,
-                                task,
-                                cancel_event=cancel_event,
-                                app_id=request.app_id,
-                                language=request.language,
-                                filter_type=request.filter,
-                                review_type=request.review_type,
-                                purchase_type=request.purchase_type,
-                                use_review_quality=request.use_review_quality,
-                            )
-                        except TaskCancelledError:
-                            await session.refresh(task)
-                            await finalize_cancelled_task(
-                                session,
-                                task,
-                                message="任务已取消",
-                                details={"reason": "cancelled_during_probe_wait"},
-                            )
-                            await session.commit()
-                            return
+                        if should_wait_for_probe:
+                            try:
+                                await wait_for_steam_availability(
+                                    session,
+                                    task,
+                                    cancel_event=cancel_event,
+                                    app_id=request.app_id,
+                                    language=request.language,
+                                    filter_type=request.filter,
+                                    review_type=request.review_type,
+                                    purchase_type=request.purchase_type,
+                                    use_review_quality=request.use_review_quality,
+                                )
+                            except TaskCancelledError:
+                                await session.refresh(task)
+                                await finalize_cancelled_task(
+                                    session,
+                                    task,
+                                    message="任务已取消",
+                                    details={"reason": "cancelled_during_probe_wait"},
+                                )
+                                await session.commit()
+                                return
+                            should_wait_for_probe = False
 
                         service = SteamReviewSyncService(session, cancel_event=cancel_event)
                         try:
@@ -372,6 +375,7 @@ async def _run_review_sync_job(sync_job_id: int, request: ReviewSyncRequest) -> 
                                 )
                             )
                         except SteamTemporarilyUnavailableError:
+                            should_wait_for_probe = True
                             continue
                         if result.status in {"success", "partial_success", "cancelled"}:
                             return

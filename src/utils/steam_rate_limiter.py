@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 from src.config import get_config
+from src.utils.steam_reviews_api import build_ajaxappreviews_params
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 ProbeCallback = Callable[[dict[str, Any]], Awaitable[None]]
@@ -242,24 +243,15 @@ class SteamRateLimiter:
         purchase_type: str,
         use_review_quality: bool,
     ) -> dict[str, Any]:
-        return {
-            "json": "1",
-            "cursor": "*",
-            "language": language,
-            "filter": filter_type,
-            "review_type": review_type,
-            "purchase_type": purchase_type,
-            "num_per_page": "1",
-            "date_range_type": "all",
-            "day_range": "30",
-            "start_date": "-1",
-            "end_date": "-1",
-            "filter_offtopic_activity": "1",
-            "playtime_filter_max": "0",
-            "playtime_filter_min": "0",
-            "playtime_type": "all",
-            "use_review_quality": "1" if use_review_quality else "0",
-        }
+        return build_ajaxappreviews_params(
+            cursor="*",
+            language=language,
+            filter_type=filter_type,
+            review_type=review_type,
+            purchase_type=purchase_type,
+            num_per_page=1,
+            use_review_quality=use_review_quality,
+        )
 
     def _next_probe_seconds_locked(self, now: float) -> float:
         cooldown_remaining = max(0.0, self._cooldown_until - now)

@@ -18,17 +18,20 @@ configure_defaults() {
 
 load_dotenv() {
   [[ -f .env ]] || return 0
-  while IFS='=' read -r key value; do
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ "$line" =~ ^[[:space:]]*(#|$) ]] && continue
+    key="${line%%=*}"
+    value="${line#*=}"
     [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || continue
     [[ -z "${!key+x}" ]] || continue
-    value="${value%$'\r'}"
     if [[ "$value" == \"*\" && "$value" == *\" ]]; then
       value="${value:1:${#value}-2}"
     elif [[ "$value" == \'*\' && "$value" == *\' ]]; then
       value="${value:1:${#value}-2}"
     fi
     export "$key=$value"
-  done < <(grep -vE '^[[:space:]]*(#|$)' .env || true)
+  done < .env
 }
 
 detect_compose() {

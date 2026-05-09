@@ -15,7 +15,7 @@ from app.services.developer_replies import DeveloperReplyError, DeveloperReplySe
 class FakeSteamReplyClient:
     async def set_developer_response(self, recommendation_id: str, response_text: str) -> dict:
         assert recommendation_id == "1001"
-        assert response_text == "感谢反馈，我们会继续优化。"
+        assert response_text == "final reply content"
         return {"success": True, "response": {"success": 1}}
 
     async def close(self) -> None:
@@ -32,20 +32,30 @@ async def test_developer_reply_send_updates_record_review_and_draft() -> None:
         review, draft = await seed_review_with_draft(session)
         service = DeveloperReplyService(session, client_factory=FakeSteamReplyClient)
 
-        record = await service.send_reply(review.id, confirmed=True, draft_id=draft.id)
+        record = await service.send_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+            sent_by_user_id=7,
+        )
 
         stored_review = await session.get(SteamReview, review.id)
         stored_draft = await session.get(ReplyDraft, draft.id)
 
     await engine.dispose()
 
+    assert record.content == "final reply content"
     assert record.status == "sent"
     assert record.sent_at is not None
     assert stored_review is not None
     assert stored_review.reply_status == "replied"
-    assert stored_review.developer_response == "感谢反馈，我们会继续优化。"
+    assert stored_review.developer_response == "final reply content"
     assert stored_draft is not None
+    assert stored_draft.content == "final reply content"
     assert stored_draft.status == "sent"
+    assert stored_draft.reviewed_by_user_id == 7
+    assert stored_draft.reviewed_at is not None
 
 
 async def test_developer_reply_requires_confirmation() -> None:
@@ -64,6 +74,78 @@ async def test_developer_reply_requires_confirmation() -> None:
     await engine.dispose()
 
 
+async def test_developer_reply_queue_marks_review_and_draft_as_sending() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FakeSteamReplyClient)
+
+        record = await service.queue_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+            sent_by_user_id=9,
+        )
+
+        stored_review = await session.get(SteamReview, review.id)
+        stored_draft = await session.get(ReplyDraft, draft.id)
+
+    await engine.dispose()
+
+    assert record.status == "pending"
+    assert record.content == "final reply content"
+    assert stored_review is not None
+    assert stored_review.reply_status == "sending"
+    assert stored_draft is not None
+    assert stored_draft.status == "sending"
+    assert stored_draft.content == "final reply content"
+    assert stored_draft.reviewed_by_user_id == 9
+    assert stored_draft.reviewed_at is not None
+
+
+async def test_developer_reply_blocks_duplicate_send_when_pending_or_sent() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FakeSteamReplyClient)
+
+        queued_record = await service.queue_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+        )
+
+        with pytest.raises(DeveloperReplyError, match="Reply send already in progress"):
+            await service.queue_reply(
+                review.id,
+                confirmed=True,
+                draft_id=draft.id,
+                content="final reply content",
+            )
+
+        await service.perform_send(queued_record.id)
+
+        with pytest.raises(DeveloperReplyError, match="Review reply already sent"):
+            await service.queue_reply(
+                review.id,
+                confirmed=True,
+                draft_id=draft.id,
+                content="final reply content",
+            )
+
+    await engine.dispose()
+
+
 async def test_reply_records_delete_request_route() -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
@@ -75,7 +157,7 @@ async def test_reply_records_delete_request_route() -> None:
         record = DeveloperReply(
             review_id=review.id,
             recommendation_id=review.recommendation_id,
-            content="已发送回复",
+            content="sent reply content",
             status="sent",
         )
         seed_session.add(record)
@@ -103,21 +185,100 @@ async def test_reply_records_delete_request_route() -> None:
             delete_response = await client.post(
                 f"/api/reply-records/{record_id}/delete-request",
                 headers=headers,
-                json={"confirmed": True, "reason": "测试删除请求"},
+                json={"confirmed": True, "reason": "delete request for test"},
             )
     finally:
         app.dependency_overrides.clear()
         await engine.dispose()
 
     assert list_response.status_code == 200
-    assert list_response.json()[0]["content"] == "已发送回复"
+    assert list_response.json()[0]["content"] == "sent reply content"
     assert list_response.json()[0]["game_name"] == "test game"
     assert audit_response.status_code == 200
-    assert audit_response.json()[0]["content"] == "感谢反馈，我们会继续优化。"
+    assert audit_response.json()[0]["content"] == "initial draft content"
     assert audit_response.json()[0]["game_name"] == "test game"
     assert delete_response.status_code == 200
     assert delete_response.json()["delete_status"] == "requested"
-    assert delete_response.json()["delete_request_reason"] == "测试删除请求"
+    assert delete_response.json()["delete_request_reason"] == "delete request for test"
+
+
+async def test_reply_records_audit_queue_excludes_replied_reviews() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FakeSteamReplyClient)
+        await service.send_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+        )
+        session.add(
+            ReplyDraft(
+                review_id=review.id,
+                content="stale pending draft",
+                status="pending_review",
+                model_name="qwen-plus",
+            )
+        )
+        await session.commit()
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/reply-records/audit-queue")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert response.status_code == 200
+    assert response.json() == []
+
+
+async def test_reply_records_audit_queue_returns_latest_active_draft_per_review() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, _ = await seed_review_with_draft(session)
+        newer_draft = ReplyDraft(
+            review_id=review.id,
+            content="latest draft content",
+            status="pending_review",
+            model_name="qwen-plus",
+        )
+        session.add(newer_draft)
+        await session.commit()
+        newer_draft_id = newer_draft.id
+        review_id = review.id
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/reply-records/audit-queue")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["id"] == newer_draft_id
+    assert response.json()[0]["content"] == "latest draft content"
+    assert response.json()[0]["review_id"] == review_id
 
 
 async def seed_review_with_draft(session: AsyncSession) -> tuple[SteamReview, ReplyDraft]:
@@ -126,7 +287,7 @@ async def seed_review_with_draft(session: AsyncSession) -> tuple[SteamReview, Re
         app_id=3350200,
         recommendation_id="1001",
         steam_id="steam-a",
-        review_text="测试评论",
+        review_text="test review",
         voted_up=False,
         votes_up=10,
         votes_funny=1,
@@ -141,7 +302,7 @@ async def seed_review_with_draft(session: AsyncSession) -> tuple[SteamReview, Re
     await session.flush()
     draft = ReplyDraft(
         review_id=review.id,
-        content="感谢反馈，我们会继续优化。",
+        content="initial draft content",
         status="pending_review",
         model_name="qwen-plus",
     )

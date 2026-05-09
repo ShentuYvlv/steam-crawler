@@ -3,7 +3,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session
@@ -19,6 +19,8 @@ from app.schemas import (
 router = APIRouter(prefix="/reply-records", tags=["reply-records"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
+ACTIVE_AUDIT_DRAFT_STATUSES = ["pending_review", "generation_failed", "send_failed"]
+ACTIVE_AUDIT_REVIEW_STATUSES = ["drafted", "generation_failed", "send_failed"]
 
 
 @router.get("", response_model=list[ReplyRecordListItem])
@@ -26,13 +28,17 @@ async def list_reply_records(
     session: SessionDependency,
     status: str | None = None,
     app_id: int | None = Query(default=None, gt=0),
-    limit: int = Query(default=50, gt=0, le=200),
+    limit: int = Query(default=200, gt=0, le=500),
 ) -> list[ReplyRecordListItem]:
     statement = (
         select(DeveloperReply, SteamReview, SteamGame)
         .join(SteamReview, SteamReview.id == DeveloperReply.review_id)
         .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
-        .order_by(desc(DeveloperReply.created_at), desc(DeveloperReply.id))
+        .order_by(
+            desc(SteamReview.timestamp_created),
+            desc(DeveloperReply.sent_at),
+            desc(DeveloperReply.id),
+        )
         .limit(limit)
     )
     if status:
@@ -64,11 +70,22 @@ async def list_reply_audit_queue(
     status: str | None = Query(default=None),
     limit: int = Query(default=100, gt=0, le=500),
 ) -> list[ReplyDraftAuditListItem]:
+    latest_active_draft_subquery = (
+        select(
+            ReplyDraft.review_id.label("review_id"),
+            func.max(ReplyDraft.id).label("draft_id"),
+        )
+        .where(ReplyDraft.status.in_(ACTIVE_AUDIT_DRAFT_STATUSES))
+        .group_by(ReplyDraft.review_id)
+        .subquery()
+    )
     statement = (
         select(ReplyDraft, SteamReview, SteamGame)
+        .join(latest_active_draft_subquery, latest_active_draft_subquery.c.draft_id == ReplyDraft.id)
         .join(SteamReview, SteamReview.id == ReplyDraft.review_id)
         .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
-        .where(ReplyDraft.status.in_(["pending_review", "generation_failed", "send_failed"]))
+        .where(ReplyDraft.status.in_(ACTIVE_AUDIT_DRAFT_STATUSES))
+        .where(SteamReview.reply_status.in_(ACTIVE_AUDIT_REVIEW_STATUSES))
         .order_by(
             SteamGame.name.asc(),
             desc(SteamReview.timestamp_created),

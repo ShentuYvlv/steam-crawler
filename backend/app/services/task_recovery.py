@@ -7,6 +7,7 @@ from sqlalchemy import select
 from app.core.database import AsyncSessionLocal
 from app.models import SyncJob, TaskSchedule
 from app.schemas import ReviewSyncRequest
+from app.services.developer_replies import recover_pending_reply_sends
 
 
 async def recover_incomplete_steam_jobs() -> None:
@@ -41,3 +42,5 @@ async def recover_incomplete_steam_jobs() -> None:
                 per_page=int(options.get("per_page") or 100),
             )
             asyncio.create_task(_run_review_sync_job(job.id, request))
+
+    await recover_pending_reply_sends()

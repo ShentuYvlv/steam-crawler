@@ -29,7 +29,11 @@ from app.schemas import (
     SyncJobDetailResponse,
     SyncJobListItem,
 )
-from app.services.developer_replies import DeveloperReplyError, DeveloperReplyService
+from app.services.developer_replies import (
+    DeveloperReplyError,
+    DeveloperReplyService,
+    process_pending_reply_send,
+)
 from app.services.reply_generation import ReplyGenerationError, ReplyGenerationService
 from app.services.review_sync import ReviewSyncOptions, SteamReviewSyncService
 from app.services.task_logs import add_task_log
@@ -222,16 +226,17 @@ async def regenerate_reply(
     return await generate_reply(review_id, session)
 
 
-@router.post("/{review_id}/send-reply", response_model=SendReplyResponse)
+@router.post("/{review_id}/send-reply", response_model=SendReplyResponse, status_code=202)
 async def send_reply(
     review_id: int,
     request: SendReplyRequest,
+    background_tasks: BackgroundTasks,
     session: SessionDependency,
     current_user: RequireOperator,
 ) -> SendReplyResponse:
     service = DeveloperReplyService(session)
     try:
-        record = await service.send_reply(
+        record = await service.queue_reply(
             review_id,
             confirmed=request.confirmed,
             draft_id=request.draft_id,
@@ -239,14 +244,18 @@ async def send_reply(
             sent_by_user_id=current_user.id,
         )
     except DeveloperReplyError as exc:
-        status_code = 404 if str(exc) in {"Review not found", "Reply draft not found"} else 400
-        if exc.record_id is not None:
+        message = str(exc)
+        status_code = 404 if message in {"Review not found", "Reply draft not found"} else 400
+        if message in {"Reply send already in progress", "Review reply already sent"}:
+            status_code = 409
+        if exc.record_id is not None and message not in {"Reply send already in progress", "Review reply already sent"}:
             status_code = 502
         raise HTTPException(
             status_code=status_code,
-            detail={"message": str(exc), "record_id": exc.record_id},
+            detail={"message": message, "record_id": exc.record_id},
         ) from exc
-    return SendReplyResponse(record=record)
+    background_tasks.add_task(process_pending_reply_send, record.id)
+    return SendReplyResponse(record=record, queued=True)
 
 
 @router.post("/bulk-send-reply", response_model=BulkSendReplyResponse, status_code=202)

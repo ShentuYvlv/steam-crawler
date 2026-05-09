@@ -12,160 +12,111 @@ import {
   regenerateReplyDraft,
   sendReviewReply,
   updateReplyDraft,
+  type GameListItem,
   type ReplyDraftAuditItem,
-  type ReplyRecord
+  type ReplyRecord,
 } from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
-type WorkspaceItem =
-  | {
-      key: string;
-      kind: "draft";
-      app_id: number;
-      game_name: string | null;
-      timestamp: string | null;
-      persona_name: string | null;
-      review_text: string;
-      reply_content: string;
-      status: string;
-      title: string;
-      subtitle: string;
-      draft: ReplyDraftAuditItem;
-    }
-  | {
-      key: string;
-      kind: "record";
-      app_id: number;
-      game_name: string | null;
-      timestamp: string | null;
-      persona_name: string | null;
-      review_text: string;
-      reply_content: string;
-      status: string;
-      title: string;
-      subtitle: string;
-      record: ReplyRecord;
-    };
+const AUDIT_QUEUE_QUERY = { limit: 500 };
+const SENT_RECORD_QUERY = { status: "sent", limit: 500 };
+
+type GameSummary = {
+  appId: number;
+  name: string;
+  draftCount: number;
+  sentCount: number;
+  totalCount: number;
+  latestAt: string | null;
+};
+
+type DaySummary = {
+  dayKey: string;
+  label: string;
+  draftCount: number;
+  sentCount: number;
+  totalCount: number;
+  latestAt: string | null;
+};
 
 function ReplyRecordsPage() {
-  const queryClient = useQueryClient();
   const [selectedAppId, setSelectedAppId] = useState<number | null>(null);
-  const [selectedItemKey, setSelectedItemKey] = useState<string | null>(null);
+  const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
 
   const gamesQuery = useQuery({ queryKey: ["games"], queryFn: fetchGames });
   const auditQueueQuery = useQuery({
-    queryKey: ["reply-audit-queue"],
-    queryFn: () => fetchReplyAuditQueue(null)
+    queryKey: ["reply-audit-queue", AUDIT_QUEUE_QUERY],
+    queryFn: () => fetchReplyAuditQueue(AUDIT_QUEUE_QUERY),
   });
   const recordsQuery = useQuery({
-    queryKey: ["reply-records"],
-    queryFn: () => fetchReplyRecords()
+    queryKey: ["reply-records", SENT_RECORD_QUERY],
+    queryFn: () => fetchReplyRecords(SENT_RECORD_QUERY),
   });
 
-  const allItems = useMemo<WorkspaceItem[]>(() => {
-    const draftItems: WorkspaceItem[] = (auditQueueQuery.data ?? []).map((item) => ({
-      key: `draft-${item.id}`,
-      kind: "draft",
-      app_id: item.app_id,
-      game_name: item.game_name,
-      timestamp: item.timestamp_created,
-      persona_name: item.persona_name,
-      review_text: item.review_text,
-      reply_content: item.content ?? "",
-      status: item.status,
-      title: `草稿 #${item.id}`,
-      subtitle: `帖子 #${item.review_id}`,
-      draft: item
-    }));
-
-    const recordItems: WorkspaceItem[] = (recordsQuery.data ?? []).map((record) => ({
-      key: `record-${record.id}`,
-      kind: "record",
-      app_id: record.app_id ?? 0,
-      game_name: record.game_name ?? null,
-      timestamp: record.timestamp_created ?? record.sent_at ?? record.created_at,
-      persona_name: record.persona_name ?? null,
-      review_text: record.review_text ?? "",
-      reply_content: record.content,
-      status: record.status,
-      title: `回复记录 #${record.id}`,
-      subtitle: `帖子 #${record.review_id}`,
-      record
-    }));
-
-    return [...draftItems, ...recordItems].sort((left, right) => {
-      const leftTime = left.timestamp ? new Date(left.timestamp).getTime() : 0;
-      const rightTime = right.timestamp ? new Date(right.timestamp).getTime() : 0;
-      return rightTime - leftTime;
-    });
-  }, [auditQueueQuery.data, recordsQuery.data]);
-
-  const games = useMemo(() => {
-    const counts = new Map<number, { count: number; latestAt: string | null; name: string | null }>();
-    for (const item of allItems) {
-      if (!item.app_id) continue;
-      const current = counts.get(item.app_id);
-      if (!current) {
-        counts.set(item.app_id, {
-          count: 1,
-          latestAt: item.timestamp,
-          name: item.game_name
-        });
-        continue;
-      }
-      counts.set(item.app_id, {
-        count: current.count + 1,
-        latestAt: current.latestAt && item.timestamp
-          ? new Date(current.latestAt).getTime() > new Date(item.timestamp).getTime()
-            ? current.latestAt
-            : item.timestamp
-          : current.latestAt ?? item.timestamp,
-        name: current.name ?? item.game_name
-      });
-    }
-
-    return Array.from(counts.entries())
-      .map(([appId, summary]) => {
-        const game = (gamesQuery.data ?? []).find((entry) => entry.app_id === appId);
-        return {
-          app_id: appId,
-          name: summary.name ?? game?.name ?? `App ${appId}`,
-          count: summary.count,
-          latestAt: summary.latestAt
-        };
-      })
-      .sort((left, right) => left.name.localeCompare(right.name, "zh-CN"));
-  }, [allItems, gamesQuery.data]);
+  const gameSummaries = useMemo(
+    () => buildGameSummaries(auditQueueQuery.data ?? [], recordsQuery.data ?? [], gamesQuery.data ?? []),
+    [auditQueueQuery.data, recordsQuery.data, gamesQuery.data],
+  );
 
   useEffect(() => {
-    if (!games.length) {
+    if (gameSummaries.length === 0) {
       setSelectedAppId(null);
       return;
     }
-    if (selectedAppId === null || !games.some((game) => game.app_id === selectedAppId)) {
-      setSelectedAppId(games[0].app_id);
+    if (selectedAppId === null || !gameSummaries.some((game) => game.appId === selectedAppId)) {
+      setSelectedAppId(gameSummaries[0].appId);
     }
-  }, [games, selectedAppId]);
+  }, [gameSummaries, selectedAppId]);
 
-  const gameItems = useMemo(
-    () => allItems.filter((item) => item.app_id === selectedAppId),
-    [allItems, selectedAppId]
+  const daySummaries = useMemo(
+    () => buildDaySummaries(selectedAppId, auditQueueQuery.data ?? [], recordsQuery.data ?? []),
+    [selectedAppId, auditQueueQuery.data, recordsQuery.data],
   );
 
   useEffect(() => {
-    if (!gameItems.length) {
-      setSelectedItemKey(null);
+    if (daySummaries.length === 0) {
+      setSelectedDayKey(null);
       return;
     }
-    if (!selectedItemKey || !gameItems.some((item) => item.key === selectedItemKey)) {
-      setSelectedItemKey(gameItems[0].key);
+    if (selectedDayKey === null || !daySummaries.some((day) => day.dayKey === selectedDayKey)) {
+      setSelectedDayKey(daySummaries[0].dayKey);
     }
-  }, [gameItems, selectedItemKey]);
+  }, [daySummaries, selectedDayKey]);
 
-  const selectedItem = useMemo(
-    () => gameItems.find((item) => item.key === selectedItemKey) ?? null,
-    [gameItems, selectedItemKey]
+  const selectedGame = useMemo(
+    () => gameSummaries.find((game) => game.appId === selectedAppId) ?? null,
+    [gameSummaries, selectedAppId],
   );
+  const selectedDay = useMemo(
+    () => daySummaries.find((day) => day.dayKey === selectedDayKey) ?? null,
+    [daySummaries, selectedDayKey],
+  );
+
+  const selectedDrafts = useMemo(() => {
+    if (selectedAppId === null || selectedDayKey === null) {
+      return [];
+    }
+    return [...(auditQueueQuery.data ?? [])]
+      .filter(
+        (item) =>
+          item.app_id === selectedAppId &&
+          getDraftDayKey(item) === selectedDayKey,
+      )
+      .sort((left, right) => compareTimestamps(getDraftTimestamp(right), getDraftTimestamp(left)));
+  }, [auditQueueQuery.data, selectedAppId, selectedDayKey]);
+
+  const selectedSentRecords = useMemo(() => {
+    if (selectedAppId === null || selectedDayKey === null) {
+      return [];
+    }
+    return [...(recordsQuery.data ?? [])]
+      .filter(
+        (item) =>
+          (item.app_id ?? 0) === selectedAppId &&
+          getRecordDayKey(item) === selectedDayKey,
+      )
+      .sort((left, right) => compareTimestamps(getRecordTimestamp(right), getRecordTimestamp(left)));
+  }, [recordsQuery.data, selectedAppId, selectedDayKey]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#f4f7fb_100%)] px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
@@ -177,26 +128,26 @@ function ReplyRecordsPage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">回复审核与记录</h1>
             <p className="mt-1 text-sm text-slate-500">
-              先按游戏选择，再按时间切换具体回复记录，在右侧完成审核、发送和查看已发送内容。
+              先选游戏，再按日期切换当天评论。左侧看待审核草稿，右侧看当天已经发送的回复记录。
             </p>
           </div>
         </div>
       </section>
 
-      <section className="mt-6 grid gap-5 xl:grid-cols-[240px_240px_minmax(0,1fr)_minmax(0,1fr)]">
+      <section className="mt-6 grid gap-5 xl:grid-cols-[240px_220px_minmax(0,1fr)_minmax(0,1fr)]">
         <aside className="flex min-h-[720px] flex-col rounded-[28px] bg-white/72 p-4 shadow-[0_20px_50px_rgba(15,23,42,0.05)] backdrop-blur">
           <div className="px-2 pb-3">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">游戏</p>
-            <p className="mt-2 text-sm text-slate-500">按游戏聚合查看回复任务。</p>
+            <p className="mt-2 text-sm text-slate-500">按游戏聚合查看草稿和已发送记录。</p>
           </div>
           <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
-            {games.map((game) => {
-              const active = game.app_id === selectedAppId;
+            {gameSummaries.map((game) => {
+              const active = game.appId === selectedAppId;
               return (
                 <button
-                  key={game.app_id}
+                  key={game.appId}
                   type="button"
-                  onClick={() => setSelectedAppId(game.app_id)}
+                  onClick={() => setSelectedAppId(game.appId)}
                   className={`w-full rounded-[24px] px-4 py-4 text-left transition duration-200 ${
                     active
                       ? "bg-[linear-gradient(180deg,_rgba(239,246,255,0.96),_rgba(230,240,255,0.88))] shadow-[0_16px_36px_rgba(37,99,235,0.12)]"
@@ -204,275 +155,337 @@ function ReplyRecordsPage() {
                   }`}
                 >
                   <p className="text-sm font-semibold text-slate-900">{game.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">App {game.app_id}</p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                    <span>{game.count} 条</span>
-                    <span>{formatDateTime(game.latestAt)}</span>
+                  <p className="mt-1 text-xs text-slate-500">App {game.appId}</p>
+                  <div className="mt-3 space-y-1 text-xs text-slate-500">
+                    <p>待审核 {game.draftCount} 条</p>
+                    <p>已发送 {game.sentCount} 条</p>
+                    <p>{formatDateTime(game.latestAt)}</p>
                   </div>
                 </button>
               );
             })}
-            {!gamesQuery.isLoading && games.length === 0 ? <EmptyState text="暂无可查看的回复记录。" compact /> : null}
+            {!gamesQuery.isLoading && gameSummaries.length === 0 ? (
+              <EmptyState text="暂无可查看的回复记录。" compact />
+            ) : null}
           </div>
         </aside>
 
         <aside className="flex min-h-[720px] flex-col rounded-[28px] bg-white/72 p-4 shadow-[0_20px_50px_rgba(15,23,42,0.05)] backdrop-blur">
           <div className="px-2 pb-3">
             <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">时间</p>
-            <p className="mt-2 text-sm text-slate-500">同一游戏下按时间切换不同回复条目。</p>
+            <p className="mt-2 text-sm text-slate-500">同一游戏按日期筛选，当天帖子和回复在右侧显示。</p>
           </div>
           <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
-            {gameItems.map((item) => {
-              const active = item.key === selectedItemKey;
+            {daySummaries.map((day) => {
+              const active = day.dayKey === selectedDayKey;
               return (
                 <button
-                  key={item.key}
+                  key={day.dayKey}
                   type="button"
-                  onClick={() => setSelectedItemKey(item.key)}
+                  onClick={() => setSelectedDayKey(day.dayKey)}
                   className={`w-full rounded-[24px] px-4 py-4 text-left transition duration-200 ${
                     active
                       ? "bg-[linear-gradient(180deg,_rgba(239,246,255,0.96),_rgba(230,240,255,0.88))] shadow-[0_16px_36px_rgba(37,99,235,0.12)]"
                       : "bg-white/78 shadow-[0_10px_28px_rgba(15,23,42,0.05)] hover:bg-white hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
                   }`}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm font-semibold text-slate-900">{formatDateTime(item.timestamp)}</p>
-                    <span className={item.kind === "draft" ? "badge-orange px-2" : "badge-green px-2"}>
-                      {item.kind === "draft" ? "待审核" : "已发送"}
-                    </span>
+                  <p className="text-sm font-semibold text-slate-900">{day.label}</p>
+                  <div className="mt-3 space-y-1 text-xs text-slate-500">
+                    <p>当天共 {day.totalCount} 条</p>
+                    <p>待审核 {day.draftCount} 条</p>
+                    <p>已发送 {day.sentCount} 条</p>
                   </div>
-                  <p className="mt-2 text-xs text-slate-500">{item.subtitle}</p>
-                  <p className="mt-3 line-clamp-2 text-xs leading-6 text-slate-600">{item.reply_content || "暂无回复内容"}</p>
                 </button>
               );
             })}
-            {!auditQueueQuery.isLoading && !recordsQuery.isLoading && gameItems.length === 0 ? (
-              <EmptyState text="当前游戏暂无回复记录。" compact />
+            {!auditQueueQuery.isLoading && !recordsQuery.isLoading && daySummaries.length === 0 ? (
+              <EmptyState text="当前游戏暂无可筛选的日期。" compact />
             ) : null}
           </div>
         </aside>
 
-        <section className="min-h-[720px] rounded-[32px] bg-white/82 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
-          <ReplyContentPane item={selectedItem} />
+        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+          <ColumnHeader
+            eyebrow="待审核草稿"
+            title={selectedGame ? `${selectedGame.name} · ${selectedDay?.label ?? "请选择日期"}` : "待审核草稿"}
+            description="每条评论上方显示评论内容，下方直接编辑回复草稿。"
+            count={selectedDrafts.length}
+          />
+          <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
+            {selectedDrafts.map((item) => (
+              <DraftCard key={item.id} item={item} />
+            ))}
+            {!auditQueueQuery.isLoading && selectedGame && selectedDay && selectedDrafts.length === 0 ? (
+              <EmptyState text="这一天没有待审核草稿。" />
+            ) : null}
+            {!selectedGame ? (
+              <EmptyState text="先选择一个游戏。" />
+            ) : null}
+            {selectedGame && !selectedDay ? (
+              <EmptyState text="先在中间选择一个日期。" />
+            ) : null}
+          </div>
         </section>
 
-        <section className="min-h-[720px] rounded-[32px] bg-white/82 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
-          <CommentContentPane item={selectedItem} />
+        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+          <ColumnHeader
+            eyebrow="已发送评论"
+            title={selectedGame ? `${selectedGame.name} · ${selectedDay?.label ?? "请选择日期"}` : "已发送评论"}
+            description="显示所选游戏在该日期已经发送到 Steam 的评论回复。"
+            count={selectedSentRecords.length}
+          />
+          <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
+            {selectedSentRecords.map((item) => (
+              <SentRecordCard key={item.id} item={item} />
+            ))}
+            {!recordsQuery.isLoading && selectedGame && selectedDay && selectedSentRecords.length === 0 ? (
+              <EmptyState text="这一天还没有已发送评论。" />
+            ) : null}
+            {!selectedGame ? (
+              <EmptyState text="先选择一个游戏。" />
+            ) : null}
+            {selectedGame && !selectedDay ? (
+              <EmptyState text="先在中间选择一个日期。" />
+            ) : null}
+          </div>
         </section>
       </section>
     </main>
   );
 }
 
-function ReplyContentPane({ item }: { item: WorkspaceItem | null }) {
+function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
   const queryClient = useQueryClient();
-  const [draftText, setDraftText] = useState("");
+  const [draftText, setDraftText] = useState(item.content ?? "");
 
   useEffect(() => {
-    setDraftText(item?.reply_content ?? "");
-  }, [item]);
+    setDraftText(item.content ?? "");
+  }, [item.content, item.id]);
 
   const saveMutation = useMutation({
-    mutationFn: async () => {
-      if (!item || item.kind !== "draft") return null;
-      return updateReplyDraft(item.draft.id, { content: draftText });
-    },
+    mutationFn: async () => updateReplyDraft(item.id, { content: draftText }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
-    }
+    },
   });
 
   const regenerateMutation = useMutation({
-    mutationFn: async () => {
-      if (!item || item.kind !== "draft") return null;
-      return regenerateReplyDraft(item.draft.review_id);
-    },
+    mutationFn: async () => regenerateReplyDraft(item.review_id),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
       void queryClient.invalidateQueries({ queryKey: ["reviews"] });
-    }
+    },
   });
 
-  const sendMutation = useMutation({
-    mutationFn: async () => {
-      if (!item || item.kind !== "draft") return null;
-      return sendReviewReply(item.draft.review_id, {
-        draft_id: item.draft.id,
-        content: draftText,
-        confirmed: true
-      });
-    },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
-      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
-      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
-    }
-  });
   const rejectMutation = useMutation({
-    mutationFn: async () => {
-      if (!item || item.kind !== "draft") return null;
-      return updateReplyDraft(item.draft.id, { status: "rejected" });
-    },
+    mutationFn: async () => updateReplyDraft(item.id, { status: "rejected" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
       void queryClient.invalidateQueries({ queryKey: ["reviews"] });
       void queryClient.invalidateQueries({ queryKey: ["review"] });
-    }
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: async () => {
-      if (!item || item.kind !== "record") return null;
-      return createReplyDeleteRequest(item.record.id, {
-        confirmed: true,
-        reason: "运营后台手动标记删除需求"
-      });
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
-    }
   });
 
-  if (!item) {
-    return <EmptyDetail title="回复内容" description="先在左侧选择游戏，再在时间栏选择一条回复记录。" />;
-  }
+  const sendMutation = useMutation({
+    mutationFn: async () =>
+      sendReviewReply(item.review_id, {
+        draft_id: item.id,
+        content: draftText,
+        confirmed: true,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-audit-queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+    },
+  });
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex items-start justify-between gap-4 pb-4">
+    <article className="rounded-[28px] bg-[linear-gradient(180deg,_rgba(248,250,252,0.95),_rgba(241,245,249,0.88))] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">回复内容</p>
-          <h2 className="mt-3 text-xl font-semibold text-slate-950">{item.title}</h2>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1">
-              <Clock3 className="h-3.5 w-3.5" />
-              {formatDateTime(item.timestamp)}
+          <p className="text-sm font-semibold text-slate-900">{item.persona_name || "匿名玩家"}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
+              <MessageSquareMore className="h-3.5 w-3.5" />
+              帖子 #{item.review_id}
             </span>
-            <span className={item.kind === "draft" ? "badge-orange px-3" : "badge-green px-3"}>
-              {item.kind === "draft" ? "待审核草稿" : "已发送记录"}
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
+              <Clock3 className="h-3.5 w-3.5" />
+              {formatDateTime(item.timestamp_created ?? item.created_at)}
+            </span>
+            <span className="badge-orange px-3">
+              {getDraftStatusLabel(item.status)}
             </span>
           </div>
         </div>
-        {item.kind === "draft" ? (
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              disabled={saveMutation.isPending || draftText.trim().length === 0}
-              onClick={() => saveMutation.mutate()}
-            >
-              保存修改
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              disabled={regenerateMutation.isPending}
-              onClick={() => regenerateMutation.mutate()}
-            >
-              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-              {regenerateMutation.isPending ? "生成中..." : "重新生成"}
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={rejectMutation.isPending}
-              onClick={() => {
-                if (window.confirm("确认驳回这条草稿？驳回后会从审核队列移除。")) {
-                  rejectMutation.mutate();
-                }
-              }}
-            >
-              {rejectMutation.isPending ? "驳回中..." : "驳回草稿"}
-            </Button>
-            <Button
-              type="button"
-              disabled={sendMutation.isPending || draftText.trim().length === 0}
-              onClick={() => {
-                if (window.confirm("确认审核通过并发送这条回复到 Steam？")) {
-                  sendMutation.mutate();
-                }
-              }}
-            >
-              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-              {sendMutation.isPending ? "发送中..." : "通过并发送"}
-            </Button>
-          </div>
-        ) : (
+        <div className="flex flex-wrap justify-end gap-2">
           <Button
             type="button"
             variant="outline"
-            disabled={deleteMutation.isPending || item.record.delete_status === "requested"}
+            disabled={saveMutation.isPending || draftText.trim().length === 0}
+            onClick={() => saveMutation.mutate()}
+          >
+            保存修改
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={regenerateMutation.isPending}
+            onClick={() => regenerateMutation.mutate()}
+          >
+            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+            {regenerateMutation.isPending ? "重新生成中..." : "重新生成"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={rejectMutation.isPending}
             onClick={() => {
-              if (window.confirm("确认记录这条回复的删除需求？不会实际调用 Steam 删除。")) {
-                deleteMutation.mutate();
+              if (window.confirm("确认驳回这条草稿吗？驳回后会从待审核列表移除。")) {
+                rejectMutation.mutate();
               }
             }}
           >
-            <Trash2 className="h-4 w-4" aria-hidden="true" />
-            {item.record.delete_status === "requested" ? "已记录删除需求" : "记录删除需求"}
+            {rejectMutation.isPending ? "驳回中..." : "驳回草稿"}
           </Button>
-        )}
+          <Button
+            type="button"
+            disabled={sendMutation.isPending || draftText.trim().length === 0}
+            onClick={() => {
+              if (window.confirm("确认通过并发送这条回复到 Steam 吗？")) {
+                sendMutation.mutate();
+              }
+            }}
+          >
+            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+            {sendMutation.isPending ? "发送中..." : "通过并发送"}
+          </Button>
+        </div>
       </div>
 
-      {item.kind === "draft" && item.draft.error_message ? (
-        <div className="mt-4 rounded-[24px] bg-rose-50/90 p-4 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          生成失败：{item.draft.error_message}
+      {item.error_message ? (
+        <div className="mt-4 rounded-[22px] bg-rose-50/90 p-4 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          生成失败：{item.error_message}
         </div>
       ) : null}
 
-      <div className="mt-5 flex-1 rounded-[30px] bg-[linear-gradient(180deg,_rgba(239,246,255,0.88),_rgba(248,250,252,0.92))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)]">
-        {item.kind === "draft" ? (
+      {sendMutation.isError ? (
+        <div className="mt-4 rounded-[22px] bg-rose-50/90 p-4 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+          {(sendMutation.error as Error).message}
+        </div>
+      ) : null}
+      <div className="mt-5 space-y-4">
+        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+            {item.review_text || "暂无评论内容"}
+          </p>
+        </section>
+
+        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">回复草稿</p>
           <textarea
-            className="h-full min-h-[540px] w-full resize-none rounded-[24px] bg-white/92 px-4 py-4 text-sm leading-7 text-slate-900 outline-none shadow-[0_12px_32px_rgba(15,23,42,0.06)] transition placeholder:text-slate-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            className="mt-3 min-h-[220px] w-full resize-y rounded-[18px] border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100"
             value={draftText}
             onChange={(event) => setDraftText(event.target.value)}
           />
-        ) : (
-          <div className="h-full min-h-[540px] whitespace-pre-wrap rounded-[24px] bg-white/92 p-4 text-sm leading-7 text-slate-800 shadow-[0_12px_32px_rgba(15,23,42,0.06)]">
-            {item.reply_content || "暂无回复内容"}
+        </section>
+      </div>
+    </article>
+  );
+}
+
+function SentRecordCard({ item }: { item: ReplyRecord }) {
+  const queryClient = useQueryClient();
+  const deleteMutation = useMutation({
+    mutationFn: async () =>
+      createReplyDeleteRequest(item.id, {
+        confirmed: true,
+        reason: "运营后台手动记录删除需求",
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
+    },
+  });
+
+  return (
+    <article className="rounded-[28px] bg-[linear-gradient(180deg,_rgba(240,253,244,0.92),_rgba(248,250,252,0.9))] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-slate-900">{item.persona_name || "匿名玩家"}</p>
+          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
+              <MessageSquareMore className="h-3.5 w-3.5" />
+              帖子 #{item.review_id}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
+              <Clock3 className="h-3.5 w-3.5" />
+              {formatDateTime(item.sent_at ?? item.created_at)}
+            </span>
+            <span className="badge-green px-3">已发送</span>
           </div>
-        )}
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          disabled={deleteMutation.isPending || item.delete_status === "requested"}
+          onClick={() => {
+            if (window.confirm("确认记录这条回复的删除需求吗？不会直接调用 Steam 删除。")) {
+              deleteMutation.mutate();
+            }
+          }}
+        >
+          <Trash2 className="h-4 w-4" aria-hidden="true" />
+          {item.delete_status === "requested" ? "已记录删除需求" : "记录删除需求"}
+        </Button>
       </div>
-    </div>
+
+      <div className="mt-5 space-y-4">
+        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
+            {item.review_text || "暂无评论内容"}
+          </p>
+        </section>
+
+        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">已发送回复</p>
+          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-800">
+            {item.content || "暂无回复内容"}
+          </p>
+        </section>
+      </div>
+    </article>
   );
 }
 
-function CommentContentPane({ item }: { item: WorkspaceItem | null }) {
-  if (!item) {
-    return <EmptyDetail title="评论内容" description="选择一条时间记录后，这里显示对应的玩家评论正文。" />;
-  }
-
+function ColumnHeader({
+  eyebrow,
+  title,
+  description,
+  count,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  count: number;
+}) {
   return (
-    <div className="flex h-full flex-col">
-      <div className="pb-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">评论内容</p>
-        <h2 className="mt-3 text-xl font-semibold text-slate-950">{item.persona_name || "匿名玩家"}</h2>
-        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-500">
-          <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1">
-            <MessageSquareMore className="h-3.5 w-3.5" />
-            {item.subtitle}
-          </span>
-          <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1">
-            App {item.app_id}
-          </span>
-        </div>
-      </div>
-      <div className="mt-5 flex-1 rounded-[30px] bg-[linear-gradient(180deg,_rgba(248,250,252,0.95),_rgba(241,245,249,0.9))] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-        <div className="h-full min-h-[540px] whitespace-pre-wrap rounded-[24px] bg-white/92 p-4 text-sm leading-7 text-slate-700 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-          {item.review_text || "暂无评论内容"}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyDetail({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex h-full min-h-[720px] items-center justify-center rounded-[30px] bg-[linear-gradient(180deg,_rgba(248,250,252,0.9),_rgba(241,245,249,0.8))] p-8 text-center shadow-[inset_0_1px_0_rgba(255,255,255,0.9)]">
+    <div className="flex flex-wrap items-start justify-between gap-4 pb-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{title}</p>
-        <p className="mt-3 text-sm leading-7 text-slate-500">{description}</p>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{eyebrow}</p>
+        <h2 className="mt-3 text-xl font-semibold text-slate-950">{title}</h2>
+        <p className="mt-2 text-sm text-slate-500">{description}</p>
       </div>
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+        {count} 条
+      </span>
     </div>
   );
 }
@@ -489,21 +502,208 @@ function EmptyState({ text, compact = false }: { text: string; compact?: boolean
   );
 }
 
+function buildGameSummaries(
+  drafts: ReplyDraftAuditItem[],
+  records: ReplyRecord[],
+  games: GameListItem[],
+): GameSummary[] {
+  const nameMap = new Map(games.map((game) => [game.app_id, game.name?.trim() || `App ${game.app_id}`]));
+  const summaries = new Map<number, GameSummary>();
+
+  for (const draft of drafts) {
+    upsertGameSummary(
+      summaries,
+      draft.app_id,
+      draft.game_name,
+      nameMap,
+      { draftCount: 1, sentCount: 0, timestamp: getDraftTimestamp(draft) },
+    );
+  }
+
+  for (const record of records) {
+    if (!record.app_id) {
+      continue;
+    }
+    upsertGameSummary(
+      summaries,
+      record.app_id,
+      record.game_name ?? null,
+      nameMap,
+      { draftCount: 0, sentCount: 1, timestamp: getRecordTimestamp(record) },
+    );
+  }
+
+  return [...summaries.values()].sort((left, right) => compareTimestamps(right.latestAt, left.latestAt));
+}
+
+function buildDaySummaries(
+  appId: number | null,
+  drafts: ReplyDraftAuditItem[],
+  records: ReplyRecord[],
+): DaySummary[] {
+  if (appId === null) {
+    return [];
+  }
+
+  const summaries = new Map<string, DaySummary>();
+
+  for (const draft of drafts) {
+    if (draft.app_id !== appId) {
+      continue;
+    }
+    const dayKey = getDraftDayKey(draft);
+    upsertDaySummary(summaries, dayKey, {
+      draftCount: 1,
+      sentCount: 0,
+      timestamp: getDraftTimestamp(draft),
+    });
+  }
+
+  for (const record of records) {
+    if ((record.app_id ?? 0) !== appId) {
+      continue;
+    }
+    const dayKey = getRecordDayKey(record);
+    upsertDaySummary(summaries, dayKey, {
+      draftCount: 0,
+      sentCount: 1,
+      timestamp: getRecordTimestamp(record),
+    });
+  }
+
+  return [...summaries.values()].sort((left, right) => compareTimestamps(right.latestAt, left.latestAt));
+}
+
+function upsertGameSummary(
+  summaries: Map<number, GameSummary>,
+  appId: number,
+  gameName: string | null,
+  nameMap: Map<number, string>,
+  delta: { draftCount: number; sentCount: number; timestamp: string | null },
+) {
+  const existing = summaries.get(appId);
+  const resolvedName = (gameName?.trim() || nameMap.get(appId) || `App ${appId}`).trim();
+  if (!existing) {
+    summaries.set(appId, {
+      appId,
+      name: resolvedName,
+      draftCount: delta.draftCount,
+      sentCount: delta.sentCount,
+      totalCount: delta.draftCount + delta.sentCount,
+      latestAt: delta.timestamp,
+    });
+    return;
+  }
+
+  summaries.set(appId, {
+    ...existing,
+    draftCount: existing.draftCount + delta.draftCount,
+    sentCount: existing.sentCount + delta.sentCount,
+    totalCount: existing.totalCount + delta.draftCount + delta.sentCount,
+    latestAt: compareTimestamps(existing.latestAt, delta.timestamp) >= 0 ? existing.latestAt : delta.timestamp,
+  });
+}
+
+function upsertDaySummary(
+  summaries: Map<string, DaySummary>,
+  dayKey: string,
+  delta: { draftCount: number; sentCount: number; timestamp: string | null },
+) {
+  const existing = summaries.get(dayKey);
+  if (!existing) {
+    summaries.set(dayKey, {
+      dayKey,
+      label: formatDayLabel(dayKey),
+      draftCount: delta.draftCount,
+      sentCount: delta.sentCount,
+      totalCount: delta.draftCount + delta.sentCount,
+      latestAt: delta.timestamp,
+    });
+    return;
+  }
+
+  summaries.set(dayKey, {
+    ...existing,
+    draftCount: existing.draftCount + delta.draftCount,
+    sentCount: existing.sentCount + delta.sentCount,
+    totalCount: existing.totalCount + delta.draftCount + delta.sentCount,
+    latestAt: compareTimestamps(existing.latestAt, delta.timestamp) >= 0 ? existing.latestAt : delta.timestamp,
+  });
+}
+
+function getDraftTimestamp(item: ReplyDraftAuditItem) {
+  return item.timestamp_created ?? item.created_at;
+}
+
+function getRecordTimestamp(item: ReplyRecord) {
+  return item.timestamp_created ?? item.sent_at ?? item.created_at;
+}
+
+function getDraftDayKey(item: ReplyDraftAuditItem) {
+  return toDayKey(getDraftTimestamp(item));
+}
+
+function getRecordDayKey(item: ReplyRecord) {
+  return toDayKey(getRecordTimestamp(item));
+}
+
+function toDayKey(value: string | null | undefined) {
+  if (!value) {
+    return "unknown";
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "unknown";
+  }
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function compareTimestamps(left: string | null | undefined, right: string | null | undefined) {
+  const leftTime = left ? new Date(left).getTime() : 0;
+  const rightTime = right ? new Date(right).getTime() : 0;
+  return leftTime - rightTime;
+}
+
 function formatDateTime(value: string | null | undefined) {
   if (!value) {
     return "未知时间";
   }
-  return new Date(value).toLocaleString("zh-CN", {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "未知时间";
+  }
+  return date.toLocaleString("zh-CN", {
     year: "numeric",
     month: "numeric",
     day: "numeric",
     hour: "2-digit",
-    minute: "2-digit"
+    minute: "2-digit",
   });
+}
+
+function formatDayLabel(dayKey: string) {
+  if (dayKey === "unknown") {
+    return "未知日期";
+  }
+  const [year, month, day] = dayKey.split("-");
+  return `${year}/${Number(month)}/${Number(day)}`;
+}
+
+function getDraftStatusLabel(status: string) {
+  if (status === "generation_failed") {
+    return "生成失败";
+  }
+  if (status === "send_failed") {
+    return "发送失败";
+  }
+  return "待审核";
 }
 
 export const replyRecordsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/reply-records",
-  component: ReplyRecordsPage
+  component: ReplyRecordsPage,
 });

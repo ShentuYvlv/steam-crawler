@@ -73,7 +73,7 @@ class DeveloperReplyClient:
             }
             self._client = httpx.AsyncClient(
                 headers=headers,
-                timeout=httpx.Timeout(self.config.http.timeout),
+                timeout=httpx.Timeout(max(float(self.config.http.timeout), 60.0)),
                 verify=False,
             )
         return self._client

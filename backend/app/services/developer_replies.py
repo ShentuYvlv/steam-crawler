@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from collections.abc import Callable
 from datetime import datetime
@@ -10,6 +11,7 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import AsyncSessionLocal
 from app.core.config import get_settings
 from app.core.error_utils import format_exception_message
 from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamReview
@@ -51,6 +53,24 @@ class DeveloperReplyService:
         content: str | None = None,
         sent_by_user_id: int | None = None,
     ) -> DeveloperReply:
+        record = await self.queue_reply(
+            review_id,
+            confirmed=confirmed,
+            draft_id=draft_id,
+            content=content,
+            sent_by_user_id=sent_by_user_id,
+        )
+        return await self.perform_send(record.id)
+
+    async def queue_reply(
+        self,
+        review_id: int,
+        *,
+        confirmed: bool,
+        draft_id: int | None = None,
+        content: str | None = None,
+        sent_by_user_id: int | None = None,
+    ) -> DeveloperReply:
         if not confirmed:
             raise DeveloperReplyError("Sending a Steam developer reply requires confirmation")
 
@@ -58,10 +78,28 @@ class DeveloperReplyService:
         if review is None:
             raise DeveloperReplyError("Review not found")
 
+        blocking_record = await self._find_blocking_record(review.id)
+        if blocking_record is not None and blocking_record.status == "pending":
+            raise DeveloperReplyError("Reply send already in progress", blocking_record.id)
+        if review.reply_status == "sending":
+            raise DeveloperReplyError("Reply send already in progress", blocking_record.id if blocking_record else None)
+        if review.reply_status == "replied":
+            raise DeveloperReplyError("Review reply already sent", blocking_record.id if blocking_record else None)
+        if blocking_record is not None and blocking_record.status == "sent":
+            raise DeveloperReplyError("Review reply already sent", blocking_record.id)
+
         draft = await self._resolve_draft(review.id, draft_id)
         reply_content = (content or (draft.content if draft else "")).strip()
         if not reply_content:
             raise DeveloperReplyError("Reply content is required")
+
+        now = datetime.now(tz=CHINA_TZ)
+        if draft is not None:
+            draft.content = reply_content
+            draft.status = "sending"
+            draft.reviewed_by_user_id = sent_by_user_id
+            draft.reviewed_at = now
+        review.reply_status = "sending"
 
         record = DeveloperReply(
             review_id=review.id,
@@ -72,32 +110,67 @@ class DeveloperReplyService:
             sent_by_user_id=sent_by_user_id,
         )
         self.session.add(record)
-        await self.session.flush()
+        self.session.add(
+            OperationLog(
+                action="developer_reply_queued",
+                user_id=sent_by_user_id,
+                target_type="developer_reply",
+                target_id=str(review.id),
+                details=json.dumps(
+                    {"review_id": review.id, "recommendation_id": review.recommendation_id},
+                    ensure_ascii=False,
+                ),
+            )
+        )
+        await self.session.commit()
+        await self.session.refresh(record)
+        return record
+
+    async def perform_send(self, record_id: int) -> DeveloperReply:
+        record = await self.session.get(DeveloperReply, record_id)
+        if record is None:
+            raise DeveloperReplyError("Reply record not found", record_id)
+        if record.status == "sent":
+            await self.session.refresh(record)
+            return record
+        if record.status != "pending":
+            raise DeveloperReplyError("Reply send is not pending", record.id)
+
+        review = await self.session.get(SteamReview, record.review_id)
+        if review is None:
+            record.status = "failed"
+            record.error_message = "Review not found"
+            await self.session.commit()
+            raise DeveloperReplyError("Review not found", record.id)
+
+        draft = await self.session.get(ReplyDraft, record.draft_id) if record.draft_id is not None else None
 
         client: SteamDeveloperReplyClient | None = None
         try:
             client = self.client_factory()
             steam_result = await client.set_developer_response(
                 recommendation_id=review.recommendation_id,
-                response_text=reply_content,
+                response_text=record.content,
             )
             if not steam_result.get("success"):
                 raise DeveloperReplyError(json.dumps(steam_result, ensure_ascii=False), record.id)
 
             now = datetime.now(tz=CHINA_TZ)
             record.status = "sent"
+            record.error_message = None
             record.steam_response = json.dumps(steam_result.get("response"), ensure_ascii=False)
             record.sent_at = now
             review.reply_status = "replied"
-            review.developer_response = reply_content
+            review.developer_response = record.content
             review.developer_response_created_at = now
             if draft is not None:
                 draft.status = "sent"
-                draft.reviewed_at = now
+                if draft.reviewed_at is None:
+                    draft.reviewed_at = now
             self.session.add(
                 OperationLog(
                     action="developer_reply_sent",
-                    user_id=sent_by_user_id,
+                    user_id=record.sent_by_user_id,
                     target_type="developer_reply",
                     target_id=str(record.id),
                     details=json.dumps(
@@ -121,6 +194,31 @@ class DeveloperReplyService:
         finally:
             if client is not None:
                 await client.close()
+
+    async def _find_blocking_record(self, review_id: int) -> DeveloperReply | None:
+        pending_result = await self.session.execute(
+            select(DeveloperReply)
+            .where(
+                DeveloperReply.review_id == review_id,
+                DeveloperReply.status == "pending",
+            )
+            .order_by(desc(DeveloperReply.created_at), desc(DeveloperReply.id))
+            .limit(1)
+        )
+        pending_record = pending_result.scalar_one_or_none()
+        if pending_record is not None:
+            return pending_record
+
+        sent_result = await self.session.execute(
+            select(DeveloperReply)
+            .where(
+                DeveloperReply.review_id == review_id,
+                DeveloperReply.status == "sent",
+            )
+            .order_by(desc(DeveloperReply.sent_at), desc(DeveloperReply.id))
+            .limit(1)
+        )
+        return sent_result.scalar_one_or_none()
 
     async def _resolve_draft(self, review_id: int, draft_id: int | None) -> ReplyDraft | None:
         if draft_id is not None:
@@ -148,3 +246,25 @@ def create_steam_reply_client() -> SteamDeveloperReplyClient:
 
     cookie_header = load_cookie_header(cookie_file)
     return DeveloperReplyClient(cookie_header=cookie_header)
+
+
+async def process_pending_reply_send(record_id: int) -> None:
+    async with AsyncSessionLocal() as session:
+        service = DeveloperReplyService(session)
+        try:
+            await service.perform_send(record_id)
+        except DeveloperReplyError:
+            return
+
+
+async def recover_pending_reply_sends() -> None:
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(DeveloperReply.id)
+            .where(DeveloperReply.status == "pending")
+            .order_by(DeveloperReply.created_at, DeveloperReply.id)
+        )
+        record_ids = list(result.scalars().all())
+
+    for record_id in record_ids:
+        asyncio.create_task(process_pending_reply_send(record_id))

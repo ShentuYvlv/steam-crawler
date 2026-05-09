@@ -420,8 +420,8 @@ export async function updateReplyDraft(
 export async function sendReviewReply(
   reviewId: number,
   payload: { draft_id?: number; content?: string; confirmed: boolean }
-): Promise<{ record: ReplyRecord }> {
-  return apiRequest<{ record: ReplyRecord }>(`/reviews/${reviewId}/send-reply`, {
+): Promise<{ record: ReplyRecord; queued: boolean }> {
+  return apiRequest<{ record: ReplyRecord; queued: boolean }>(`/reviews/${reviewId}/send-reply`, {
     method: "POST",
     body: JSON.stringify(payload)
   });
@@ -433,17 +433,46 @@ export async function regenerateReplyDraft(reviewId: number): Promise<{ draft: R
   });
 }
 
-export async function fetchReplyRecords(): Promise<ReplyRecord[]> {
-  return apiGet<ReplyRecord[]>("/reply-records");
+export type ReplyRecordQuery = {
+  status?: string;
+  appId?: number | null;
+  limit?: number;
+};
+
+export type ReplyAuditQueueQuery = {
+  appId?: number | null;
+  status?: string;
+  limit?: number;
+};
+
+export async function fetchReplyRecords(query: ReplyRecordQuery = {}): Promise<ReplyRecord[]> {
+  const params = new URLSearchParams();
+  if (query.status) {
+    params.set("status", query.status);
+  }
+  if (query.appId) {
+    params.set("app_id", String(query.appId));
+  }
+  if (query.limit) {
+    params.set("limit", String(query.limit));
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiGet<ReplyRecord[]>(`/reply-records${suffix}`);
 }
 
-export async function fetchReplyAuditQueue(appId?: number | null): Promise<ReplyDraftAuditItem[]> {
+export async function fetchReplyAuditQueue(query: ReplyAuditQueueQuery = {}): Promise<ReplyDraftAuditItem[]> {
   const params = new URLSearchParams();
-  if (appId) {
-    params.set("app_id", String(appId));
+  if (query.appId) {
+    params.set("app_id", String(query.appId));
   }
-  const query = params.toString() ? `?${params.toString()}` : "";
-  return apiGet<ReplyDraftAuditItem[]>(`/reply-records/audit-queue${query}`);
+  if (query.status) {
+    params.set("status", query.status);
+  }
+  if (query.limit) {
+    params.set("limit", String(query.limit));
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiGet<ReplyDraftAuditItem[]>(`/reply-records/audit-queue${suffix}`);
 }
 
 export async function bulkSendReplyRecords(payload: {

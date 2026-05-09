@@ -67,6 +67,8 @@ const replyStatusText: Record<string, string> = {
   rejected: "已驳回"
 };
 
+replyStatusText.sending = "鍙戦€佷腑";
+
 function ReviewsPage() {
   const queryClient = useQueryClient();
   const [filters, setFilters] = useState<ReviewQuery>(() => ({
@@ -875,6 +877,13 @@ function ReplyDraftAuditPanel({
         confirmed: true
       }),
     onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
+      void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
+      void queryClient.invalidateQueries({ queryKey: ["reviews"] });
+      void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
+    },
+    onError: () => {
+      void queryClient.invalidateQueries({ queryKey: ["reply-records"] });
       void queryClient.invalidateQueries({ queryKey: ["review-drafts", review.id] });
       void queryClient.invalidateQueries({ queryKey: ["reviews"] });
       void queryClient.invalidateQueries({ queryKey: ["review", review.id] });
@@ -890,7 +899,13 @@ function ReplyDraftAuditPanel({
     }
   });
 
-  const canSend = draftText.trim().length > 0 && !sendMutation.isPending;
+  const canSend =
+    draftText.trim().length > 0 &&
+    !sendMutation.isPending &&
+    review.reply_status !== "sending" &&
+    review.reply_status !== "replied" &&
+    latestDraft?.status !== "sending" &&
+    latestDraft?.status !== "sent";
 
   return (
     <section className="mt-5 rounded-2xl border border-blue-100 bg-blue-50/60 p-4">
@@ -930,6 +945,11 @@ function ReplyDraftAuditPanel({
         </div>
       ) : null}
 
+      {review.reply_status === "sending" ? (
+        <div className="mt-4 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-700">
+          褰撳墠鍥炲姝ｅ湪鍚庡彴鍙戦€侊紝璇风瓑寰呯姸鎬佸埛鏂帮紝涓嶈閲嶅鐐瑰嚮銆?
+        </div>
+      ) : null}
       <textarea
         className="form-textarea mt-4 min-h-36 w-full p-4"
         value={draftText}

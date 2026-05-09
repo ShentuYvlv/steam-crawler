@@ -44,6 +44,7 @@ class ReplyRecordListItem(ReplyRecordResponse):
 
 class SendReplyResponse(BaseModel):
     record: ReplyRecordResponse
+    queued: bool = True
 
 
 class BulkSendReplyResponse(BaseModel):

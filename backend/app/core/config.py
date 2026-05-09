@@ -44,6 +44,46 @@ class Settings(BaseSettings):
         default="./data/steam_cookie.txt",
         validation_alias="STEAM_COOKIE_FILE",
     )
+    oxylabs_proxy_enabled: bool = Field(
+        default=False,
+        validation_alias="OXYLABS_PROXY_ENABLED",
+    )
+    oxylabs_proxy_host: str = Field(
+        default="dc.oxylabs.io",
+        validation_alias="OXYLABS_PROXY_HOST",
+    )
+    oxylabs_proxy_port: int = Field(
+        default=8000,
+        validation_alias="OXYLABS_PROXY_PORT",
+    )
+    oxylabs_proxy_username: str | None = Field(
+        default=None,
+        validation_alias="OXYLABS_PROXY_USERNAME",
+    )
+    oxylabs_proxy_password: str | None = Field(
+        default=None,
+        validation_alias="OXYLABS_PROXY_PASSWORD",
+    )
+    oxylabs_proxy_scheme: str = Field(
+        default="https",
+        validation_alias="OXYLABS_PROXY_SCHEME",
+    )
+    oxylabs_proxy_rotating_port: int = Field(
+        default=8000,
+        validation_alias="OXYLABS_PROXY_ROTATING_PORT",
+    )
+    oxylabs_proxy_session_port_min: int = Field(
+        default=8001,
+        validation_alias="OXYLABS_PROXY_SESSION_PORT_MIN",
+    )
+    oxylabs_proxy_session_port_max: int = Field(
+        default=63000,
+        validation_alias="OXYLABS_PROXY_SESSION_PORT_MAX",
+    )
+    oxylabs_proxy_direct_fallback: bool = Field(
+        default=True,
+        validation_alias="OXYLABS_PROXY_DIRECT_FALLBACK",
+    )
     task_scheduler_enabled: bool = Field(default=True, validation_alias="TASK_SCHEDULER_ENABLED")
     task_scheduler_poll_seconds: int = Field(
         default=60,

@@ -51,7 +51,7 @@ class GameScraper:
             stop_event: 可选的停止事件标志。
         """
         self.config = config or get_config()
-        self.client = AsyncHttpClient(self.config)
+        self.client = AsyncHttpClient(self.config, proxy_mode="rotate_per_request")
         self.checkpoint = checkpoint
         self.failure_manager = failure_manager
         self.db = DatabaseManager(self.config.output.db_path)

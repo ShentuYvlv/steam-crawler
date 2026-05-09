@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from src.utils.oxylabs_proxy import build_proxy_log_fields
 from src.utils.steam_rate_limiter import get_steam_rate_limiter
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
@@ -38,6 +39,9 @@ class CommentScraperProtocol(Protocol):
         ...
 
     async def close(self) -> None:
+        ...
+
+    def get_transport_diagnostics(self) -> dict[str, Any]:
         ...
 
 
@@ -143,6 +147,7 @@ class SteamReviewSyncService:
             "Steam 限流状态",
             details={
                 "sync_mode": sync_mode,
+                **self._get_scraper_transport_diagnostics(scraper),
                 **(await get_steam_rate_limiter().snapshot()),
             },
         )
@@ -186,6 +191,7 @@ class SteamReviewSyncService:
                             "updated": updated,
                             "skipped": skipped,
                             "sync_mode": sync_mode,
+                            **self._get_scraper_transport_diagnostics(scraper),
                         },
                     )
                     while total_review_count >= next_progress_log_threshold:
@@ -251,6 +257,7 @@ class SteamReviewSyncService:
                     "updated": updated,
                     "skipped": skipped,
                     "sync_mode": sync_mode,
+                    **self._get_scraper_transport_diagnostics(scraper),
                     **(await get_steam_rate_limiter().snapshot()),
                 },
             )
@@ -268,6 +275,7 @@ class SteamReviewSyncService:
                     "updated": updated,
                     "skipped": skipped,
                     "sync_mode": sync_mode,
+                    **self._get_scraper_transport_diagnostics(scraper),
                 },
             )
             await self.session.commit()
@@ -296,6 +304,7 @@ class SteamReviewSyncService:
                     details={
                         **format_exception_details(exc),
                         "sync_mode": sync_mode,
+                        **self._get_scraper_transport_diagnostics(scraper),
                         "steam_rate_limit": await limiter.snapshot(),
                     },
                 )
@@ -315,6 +324,7 @@ class SteamReviewSyncService:
                 details={
                     **format_exception_details(exc),
                     "sync_mode": sync_mode,
+                    **self._get_scraper_transport_diagnostics(scraper),
                     "steam_rate_limit": await get_steam_rate_limiter().snapshot(),
                 },
             )
@@ -357,6 +367,12 @@ class SteamReviewSyncService:
             return self.scraper_factory(self.cancel_event)
         except TypeError:
             return self.scraper_factory()
+
+    def _get_scraper_transport_diagnostics(self, scraper: CommentScraperProtocol) -> dict[str, Any]:
+        getter = getattr(scraper, "get_transport_diagnostics", None)
+        if callable(getter):
+            return getter()
+        return build_proxy_log_fields("rotate_per_request")
 
 
 def create_comment_scraper(cancel_event=None) -> CommentScraperProtocol:

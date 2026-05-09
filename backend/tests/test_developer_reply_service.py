@@ -9,13 +9,28 @@ from app.core.database import get_session
 from app.core.security import create_access_token, hash_password
 from app.main import app
 from app.models import Base, DeveloperReply, ReplyDraft, SteamGame, SteamReview, User
-from app.services.developer_replies import DeveloperReplyError, DeveloperReplyService
+from app.services.developer_replies import (
+    DeveloperReplyError,
+    DeveloperReplyService,
+    process_pending_reply_send,
+)
 
 
 class FakeSteamReplyClient:
     async def set_developer_response(self, recommendation_id: str, response_text: str) -> dict:
         assert recommendation_id == "1001"
         assert response_text == "final reply content"
+        return {"success": True, "response": {"success": 1}}
+
+    async def close(self) -> None:
+        return None
+
+
+class CountingSteamReplyClient:
+    calls = 0
+
+    async def set_developer_response(self, recommendation_id: str, response_text: str) -> dict:
+        type(self).calls += 1
         return {"success": True, "response": {"success": 1}}
 
     async def close(self) -> None:
@@ -144,6 +159,47 @@ async def test_developer_reply_blocks_duplicate_send_when_pending_or_sent() -> N
             )
 
     await engine.dispose()
+
+
+async def test_process_pending_reply_send_recreates_default_client_and_completes(monkeypatch) -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FakeSteamReplyClient)
+        record = await service.queue_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+        )
+
+    import app.services.developer_replies as developer_replies_module
+
+    CountingSteamReplyClient.calls = 0
+    monkeypatch.setattr(developer_replies_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(
+        developer_replies_module,
+        "create_steam_reply_client",
+        lambda: CountingSteamReplyClient(),
+    )
+
+    await process_pending_reply_send(record.id)
+
+    async with session_factory() as session:
+        stored_record = await session.get(DeveloperReply, record.id)
+        stored_review = await session.get(SteamReview, review.id)
+
+    await engine.dispose()
+
+    assert CountingSteamReplyClient.calls == 1
+    assert stored_record is not None
+    assert stored_record.status == "sent"
+    assert stored_review is not None
+    assert stored_review.reply_status == "replied"
 
 
 async def test_reply_records_delete_request_route() -> None:

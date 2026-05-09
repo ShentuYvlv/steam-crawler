@@ -1,10 +1,15 @@
-"""
-工具模块。
-
-包含 HTTP 客户端和断点续爬等工具类。
-"""
-
-from src.utils.http_client import HttpClient
-from src.utils.checkpoint import Checkpoint
+"""Shared utility exports."""
 
 __all__ = ["HttpClient", "Checkpoint"]
+
+
+def __getattr__(name: str):
+    if name == "HttpClient":
+        from src.utils.http_client import HttpClient
+
+        return HttpClient
+    if name == "Checkpoint":
+        from src.utils.checkpoint import Checkpoint
+
+        return Checkpoint
+    raise AttributeError(name)

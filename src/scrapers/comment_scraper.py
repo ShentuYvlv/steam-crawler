@@ -11,6 +11,7 @@ from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 from src.config import Config, get_config
+from src.utils.oxylabs_proxy import build_proxy_log_fields
 from src.utils.steam_rate_limiter import get_steam_rate_limiter
 from src.utils.steam_reviews_api import build_ajaxappreviews_params
 from src.utils.task_control import TaskCancelledError
@@ -41,6 +42,7 @@ class CommentScraper:
             self.config,
             stop_event=stop_event,
             rate_limiter=get_steam_rate_limiter(),
+            proxy_mode="rotate_per_request",
         )
         self.ui = ui_manager
         self.stop_event = stop_event
@@ -183,3 +185,6 @@ class CommentScraper:
 
     async def close(self) -> None:
         await self.client.close()
+
+    def get_transport_diagnostics(self) -> dict[str, Any]:
+        return self.client.get_last_request_metadata() or build_proxy_log_fields("rotate_per_request")

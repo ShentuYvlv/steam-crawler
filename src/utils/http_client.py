@@ -1,29 +1,24 @@
-"""
-HTTP 客户端工具模块。
-
-封装 HTTP 请求，提供重试机制和速率限制。
-所有爬虫类均通过此客户端发起网络请求，统一处理超时、重试和延迟。
-
-本模块提供两种客户端实现：
-- HttpClient: 同步客户端（已废弃，仅为向后兼容保留）
-- AsyncHttpClient: 异步客户端（推荐使用，基于 httpx）
-"""
-
 from __future__ import annotations
 
 import asyncio
 import random
 import time
 import warnings
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING, Any
 
 import httpx
+
 try:
     import orjson
 except ImportError:
     orjson = None
 
 from src.config import Config, get_config
+from src.utils.oxylabs_proxy import (
+    ProxyMode,
+    build_proxy_log_fields,
+    load_oxylabs_proxy_settings,
+)
 from src.utils.task_control import TaskCancelledError
 
 if TYPE_CHECKING:
@@ -31,146 +26,206 @@ if TYPE_CHECKING:
 
 
 class AsyncHttpClient:
-    """异步 HTTP 客户端，支持重试和速率限制。
-
-    基于 httpx.AsyncClient 实现，提供真正的非阻塞并发请求能力。
-    推荐在所有爬虫类中使用此客户端替代同步版本。
-
-    Attributes:
-        config: 配置对象。
-        _client: httpx 异步客户端实例（延迟初始化）。
-    """
+    """Async HTTP client with retries, rate limiting, and optional proxy routing."""
 
     def __init__(
         self,
-        config: Optional[Config] = None,
+        config: Config | None = None,
         *,
         stop_event: Any | None = None,
         rate_limiter: Any | None = None,
-    ):
-        """初始化异步 HTTP 客户端。
-
-        Args:
-            config: 可选的配置对象，如果不提供则使用全局配置。
-        """
+        proxy_mode: ProxyMode = "none",
+        sticky_session_port: int | None = None,
+    ) -> None:
         self.config = config or get_config()
         self.stop_event = stop_event
         self.rate_limiter = rate_limiter
-        # 延迟初始化客户端，因为 AsyncClient 需要在异步上下文中使用
-        self._client: Optional[httpx.AsyncClient] = None
+        self.proxy_mode = proxy_mode
+        self._sticky_session_port = sticky_session_port
+        self._direct_client: httpx.AsyncClient | None = None
+        self._sticky_proxy_client: httpx.AsyncClient | None = None
+        self._last_request_metadata = build_proxy_log_fields(self.proxy_mode)
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        """获取或创建 httpx 异步客户端。
+    async def _get_direct_client(self) -> httpx.AsyncClient:
+        if self._direct_client is None:
+            self._direct_client = self._create_client()
+        return self._direct_client
 
-        采用延迟初始化策略，确保客户端在异步上下文中正确创建。
-        这样可以避免在模块导入时就创建客户端，提高灵活性。
+    async def _get_sticky_proxy_client(self) -> httpx.AsyncClient:
+        if self._sticky_proxy_client is None:
+            settings = load_oxylabs_proxy_settings()
+            if self._sticky_session_port is None:
+                self._sticky_session_port = settings.choose_sticky_session_port()
+            proxy_url = settings.build_sticky_proxy_url(session_port=self._sticky_session_port)
+            self._sticky_proxy_client = self._create_client(proxy=proxy_url)
+        return self._sticky_proxy_client
 
-        Returns:
-            httpx.AsyncClient: 异步客户端实例。
-        """
-        if self._client is None:
-            limits = httpx.Limits(
-                max_connections=self.config.http.max_connections,
-                max_keepalive_connections=self.config.http.max_keepalive_connections,
+    def _create_client(self, *, proxy: str | None = None) -> httpx.AsyncClient:
+        limits = httpx.Limits(
+            max_connections=self.config.http.max_connections,
+            max_keepalive_connections=self.config.http.max_keepalive_connections,
+        )
+        return httpx.AsyncClient(
+            headers={"User-Agent": self.config.http.user_agent},
+            timeout=httpx.Timeout(self.config.http.timeout),
+            limits=limits,
+            verify=False,
+            proxy=proxy,
+        )
+
+    async def _send_with_direct_client(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        client = await self._get_direct_client()
+        return await client.get(url, params=params)
+
+    async def _send_with_rotating_proxy(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+        *,
+        proxy_url: str,
+    ) -> httpx.Response:
+        async with self._create_client(proxy=proxy_url) as client:
+            return await client.get(url, params=params)
+
+    async def _send_with_sticky_proxy(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        client = await self._get_sticky_proxy_client()
+        return await client.get(url, params=params)
+
+    async def _send_request(
+        self,
+        url: str,
+        params: dict[str, Any] | None = None,
+    ) -> httpx.Response:
+        settings = load_oxylabs_proxy_settings()
+        if not settings.is_active_for_mode(self.proxy_mode):
+            self._last_request_metadata = build_proxy_log_fields(
+                self.proxy_mode,
+                settings=settings,
             )
-            self._client = httpx.AsyncClient(
-                headers={"User-Agent": self.config.http.user_agent},
-                timeout=httpx.Timeout(self.config.http.timeout),
-                limits=limits,
-                # 禁用 SSL 验证以兼容某些网络环境
-                # Steam API 在某些地区可能存在证书问题
-                verify=False,
+            return await self._send_with_direct_client(url, params=params)
+
+        if self.proxy_mode == "rotate_per_request":
+            proxy_url = settings.build_rotating_proxy_url()
+            metadata = build_proxy_log_fields(
+                self.proxy_mode,
+                settings=settings,
+                session_port=None,
             )
-        return self._client
+            try:
+                response = await self._send_with_rotating_proxy(
+                    url,
+                    params=params,
+                    proxy_url=proxy_url,
+                )
+                self._last_request_metadata = metadata
+                return response
+            except httpx.RequestError as proxy_exc:
+                if not settings.direct_fallback:
+                    self._last_request_metadata = build_proxy_log_fields(
+                        self.proxy_mode,
+                        settings=settings,
+                        proxy_error=proxy_exc,
+                    )
+                    raise
+                self._last_request_metadata = build_proxy_log_fields(
+                    self.proxy_mode,
+                    settings=settings,
+                    fallback_used=True,
+                    proxy_error=proxy_exc,
+                )
+                return await self._send_with_direct_client(url, params=params)
+
+        if self._sticky_session_port is None:
+            self._sticky_session_port = settings.choose_sticky_session_port()
+        metadata = build_proxy_log_fields(
+            self.proxy_mode,
+            settings=settings,
+            session_port=self._sticky_session_port,
+        )
+        try:
+            response = await self._send_with_sticky_proxy(url, params=params)
+            self._last_request_metadata = metadata
+            return response
+        except httpx.RequestError as proxy_exc:
+            if not settings.direct_fallback:
+                self._last_request_metadata = build_proxy_log_fields(
+                    self.proxy_mode,
+                    settings=settings,
+                    session_port=self._sticky_session_port,
+                    proxy_error=proxy_exc,
+                )
+                raise
+            self._last_request_metadata = build_proxy_log_fields(
+                self.proxy_mode,
+                settings=settings,
+                session_port=self._sticky_session_port,
+                fallback_used=True,
+                proxy_error=proxy_exc,
+            )
+            return await self._send_with_direct_client(url, params=params)
 
     async def get(
         self,
         url: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         delay: bool = True,
     ) -> httpx.Response:
-        """发送异步 GET 请求，带有重试和速率限制。
-
-        Args:
-            url: 请求 URL。
-            params: 可选的查询参数。
-            delay: 是否在请求后添加延迟，默认为 True。
-
-        Returns:
-            httpx.Response: 响应对象。
-
-        Raises:
-            httpx.HTTPStatusError: HTTP 状态码错误（4xx/5xx）。
-            httpx.RequestError: 请求失败且重试次数耗尽时抛出。
-        """
-        client = await self._get_client()
-        last_exception: Optional[Exception] = None
+        last_exception: Exception | None = None
 
         for attempt in range(self.config.http.max_retries + 1):
             try:
                 self._raise_if_cancelled()
                 if self.rate_limiter is not None:
                     await self.rate_limiter.before_request(self.stop_event)
-                response = await client.get(url, params=params)
+
+                response = await self._send_request(url, params=params)
                 response.raise_for_status()
+
                 if self.rate_limiter is not None:
                     await self.rate_limiter.record_success()
-
-                # 请求成功后添加延迟，避免请求过快触发限流
                 if delay and self.rate_limiter is None:
                     await self._delay()
-
                 return response
-
-            except (httpx.HTTPStatusError, httpx.RequestError) as e:
-                last_exception = e
+            except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+                last_exception = exc
                 if self.rate_limiter is not None:
-                    await self.rate_limiter.record_error(e)
+                    await self.rate_limiter.record_error(exc)
                 if attempt < self.config.http.max_retries:
-                    # 指数退避策略：等待时间 = 2^attempt + 随机抖动
-                    # 这样做可以防止所有客户端在同一时间重试（雷鸣群问题）
-                    # 并给服务器足够的恢复时间
                     wait_time = (2**attempt) + random.uniform(0, 1)
                     print(
                         f"请求失败，{wait_time:.1f} 秒后重试 "
-                        f"({attempt + 1}/{self.config.http.max_retries}): {e}"
+                        f"({attempt + 1}/{self.config.http.max_retries}): {exc}"
                     )
                     await self._sleep(wait_time)
 
-        raise last_exception  # type: ignore
+        raise last_exception  # type: ignore[misc]
 
     async def get_json(
         self,
         url: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         delay: bool = True,
     ) -> dict[str, Any]:
-        """发送异步 GET 请求并返回 JSON 响应。
-
-        Args:
-            url: 请求 URL。
-            params: 可选的查询参数。
-            delay: 是否在请求后添加延迟，默认为 True。
-
-        Returns:
-            dict: JSON 响应数据。
-        """
-        response = await self.get(url, params, delay)
-        
-        # 尝试使用 orjson 解析，速度更快
+        response = await self.get(url, params=params, delay=delay)
         if orjson is not None:
             try:
                 return orjson.loads(response.content)
             except Exception:
                 pass
-                
         return response.json()
 
-    async def _delay(self) -> None:
-        """添加随机延迟以避免请求过快。
+    def get_last_request_metadata(self) -> dict[str, Any]:
+        return dict(self._last_request_metadata)
 
-        使用 asyncio.sleep 实现非阻塞延迟，不会阻塞事件循环。
-        """
+    async def _delay(self) -> None:
         delay = random.uniform(
             self.config.http.min_delay,
             self.config.http.max_delay,
@@ -190,33 +245,18 @@ class AsyncHttpClient:
             raise TaskCancelledError()
 
     async def close(self) -> None:
-        """关闭客户端连接。
-
-        在爬虫完成后应当调用此方法释放资源。
-        """
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        if self._sticky_proxy_client is not None:
+            await self._sticky_proxy_client.aclose()
+            self._sticky_proxy_client = None
+        if self._direct_client is not None:
+            await self._direct_client.aclose()
+            self._direct_client = None
 
 
 class HttpClient:
-    """HTTP 客户端，支持重试和速率限制。
+    """Legacy sync HTTP client kept for backward compatibility."""
 
-    .. deprecated::
-        此类已废弃，请使用 AsyncHttpClient 替代。
-        仅为向后兼容测试脚本而保留。
-
-    Attributes:
-        config: 配置对象。
-        session: requests Session 对象。
-    """
-
-    def __init__(self, config: Optional[Config] = None):
-        """初始化 HTTP 客户端。
-
-        Args:
-            config: 可选的配置对象，如果不提供则使用全局配置。
-        """
+    def __init__(self, config: Config | None = None) -> None:
         warnings.warn(
             "HttpClient 已废弃，请使用 AsyncHttpClient 替代。",
             DeprecationWarning,
@@ -229,32 +269,15 @@ class HttpClient:
         self._requests = requests
         self.session = requests.Session()
         self.session.headers.update({"User-Agent": self.config.http.user_agent})
-
-        # 禁用 SSL 警告
-        # Steam API 请求使用 verify=False 跳过证书验证（为了兑容某些网络环境）
-        # 因此需要禁用警告避免每次请求都输出 InsecureRequestWarning
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
     def get(
         self,
         url: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         delay: bool = True,
     ) -> requests.Response:
-        """发送 GET 请求，带有重试和速率限制。
-
-        Args:
-            url: 请求 URL。
-            params: 可选的查询参数。
-            delay: 是否在请求后添加延迟，默认为 True。
-
-        Returns:
-            requests.Response: 响应对象。
-
-        Raises:
-            requests.RequestException: 请求失败且重试次数耗尽时抛出。
-        """
-        last_exception: Optional[Exception] = None
+        last_exception: Exception | None = None
 
         for attempt in range(self.config.http.max_retries + 1):
             try:
@@ -262,51 +285,34 @@ class HttpClient:
                     url,
                     params=params,
                     timeout=self.config.http.timeout,
-                    verify=False,  # 与原代码保持一致
+                    verify=False,
                 )
                 response.raise_for_status()
-
-                # 请求成功后添加延迟
                 if delay:
                     self._delay()
-
                 return response
-
-            except self._requests.RequestException as e:
-                last_exception = e
+            except self._requests.RequestException as exc:
+                last_exception = exc
                 if attempt < self.config.http.max_retries:
-                    # 指数退避策略：等待时间 = 2^attempt + 随机抖动
-                    # 这样做可以防止所有客户端在同一时间重试（雷鸣群问题）
-                    # 并给服务器足够的恢复时间
                     wait_time = (2**attempt) + random.uniform(0, 1)
                     print(
-                        f"请求失败，{wait_time:.1f} 秒后重试 ({attempt + 1}/{self.config.http.max_retries}): {e}"
+                        f"请求失败，{wait_time:.1f} 秒后重试 "
+                        f"({attempt + 1}/{self.config.http.max_retries}): {exc}"
                     )
                     time.sleep(wait_time)
 
-        raise last_exception  # type: ignore
+        raise last_exception  # type: ignore[misc]
 
     def get_json(
         self,
         url: str,
-        params: Optional[dict[str, Any]] = None,
+        params: dict[str, Any] | None = None,
         delay: bool = True,
     ) -> dict[str, Any]:
-        """发送 GET 请求并返回 JSON 响应。
-
-        Args:
-            url: 请求 URL。
-            params: 可选的查询参数。
-            delay: 是否在请求后添加延迟，默认为 True。
-
-        Returns:
-            dict: JSON 响应数据。
-        """
-        response = self.get(url, params, delay)
+        response = self.get(url, params=params, delay=delay)
         return response.json()
 
     def _delay(self) -> None:
-        """添加随机延迟以避免请求过快。"""
         delay = random.uniform(
             self.config.http.min_delay,
             self.config.http.max_delay,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import copy
 import random
 import time
 from collections import deque
@@ -10,6 +11,7 @@ from typing import Any
 import httpx
 
 from src.config import get_config
+from src.utils.http_client import AsyncHttpClient
 from src.utils.steam_reviews_api import build_ajaxappreviews_params
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
@@ -111,61 +113,56 @@ class SteamRateLimiter:
         use_review_quality: bool,
     ) -> dict[str, Any]:
         now = time.monotonic()
-        async with httpx.AsyncClient(
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/91.0.4472.124 Safari/537.36"
+        config = copy.deepcopy(get_config())
+        config.http.timeout = self._probe_timeout_seconds()
+        client = AsyncHttpClient(config, proxy_mode="rotate_per_request")
+        try:
+            payload = await client.get_json(
+                f"https://store.steampowered.com/ajaxappreviews/{app_id}",
+                params=self._build_probe_params(
+                    language=language,
+                    filter_type=filter_type,
+                    review_type=review_type,
+                    purchase_type=purchase_type,
+                    use_review_quality=use_review_quality,
+                ),
+                delay=False,
+            )
+            if payload.get("success") != 1:
+                raise httpx.RemoteProtocolError(
+                    f"Steam probe success flag invalid: {payload.get('success')}"
                 )
-            },
-            timeout=httpx.Timeout(self._probe_timeout_seconds()),
-            verify=False,
-        ) as client:
-            try:
-                response = await client.get(
-                    f"https://store.steampowered.com/ajaxappreviews/{app_id}",
-                    params=self._build_probe_params(
-                        language=language,
-                        filter_type=filter_type,
-                        review_type=review_type,
-                        purchase_type=purchase_type,
-                        use_review_quality=use_review_quality,
-                    ),
-                )
-                response.raise_for_status()
-                payload = response.json()
-                if payload.get("success") != 1:
-                    raise httpx.RemoteProtocolError(
-                        f"Steam probe success flag invalid: {payload.get('success')}"
-                    )
-                await self.record_success(reset_failures=True)
-                async with self._lock:
-                    self._last_probe_at = now
-                    self._last_probe_error = None
-                    self._cooldown_until = 0.0
-                    return {
-                        "ok": True,
-                        "probe": "steam_ajaxappreviews",
-                        "app_id": app_id,
-                        "next_probe_seconds": self._next_probe_seconds_locked(now),
-                        **self._snapshot_locked(now),
-                    }
-            except Exception as exc:
-                snapshot = await self.record_error(exc)
-                async with self._lock:
-                    self._last_probe_at = now
-                    self._last_probe_error = str(exc) or type(exc).__name__
-                    next_probe_seconds = self._next_probe_seconds_locked(now)
+            await self.record_success(reset_failures=True)
+            async with self._lock:
+                self._last_probe_at = now
+                self._last_probe_error = None
+                self._cooldown_until = 0.0
                 return {
-                    "ok": False,
+                    "ok": True,
                     "probe": "steam_ajaxappreviews",
                     "app_id": app_id,
-                    "error": str(exc) or type(exc).__name__,
-                    "exception_type": type(exc).__name__,
-                    "next_probe_seconds": next_probe_seconds,
-                    **snapshot,
+                    "next_probe_seconds": self._next_probe_seconds_locked(now),
+                    **self._snapshot_locked(now),
+                    **client.get_last_request_metadata(),
                 }
+        except Exception as exc:
+            snapshot = await self.record_error(exc)
+            async with self._lock:
+                self._last_probe_at = now
+                self._last_probe_error = str(exc) or type(exc).__name__
+                next_probe_seconds = self._next_probe_seconds_locked(now)
+            return {
+                "ok": False,
+                "probe": "steam_ajaxappreviews",
+                "app_id": app_id,
+                "error": str(exc) or type(exc).__name__,
+                "exception_type": type(exc).__name__,
+                "next_probe_seconds": next_probe_seconds,
+                **snapshot,
+                **client.get_last_request_metadata(),
+            }
+        finally:
+            await client.close()
 
     async def snapshot(self) -> dict[str, Any]:
         async with self._lock:

@@ -6,12 +6,16 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
 
 import yaml
+
+from src.utils.env_loader import load_env_defaults
+
+
+load_env_defaults()
 
 
 @dataclass

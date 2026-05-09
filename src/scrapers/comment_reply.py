@@ -1,28 +1,20 @@
-"""
-Steam 开发者评论回复模块。
-
-调用 Steam Community 的 setdeveloperresponse 接口，为用户评测设置开发者回复。
-"""
-
 from __future__ import annotations
 
 import asyncio
 from http.cookies import SimpleCookie
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import httpx
 
 from src.config import Config, get_config
+from src.utils.oxylabs_proxy import (
+    build_proxy_log_fields,
+    load_oxylabs_proxy_settings,
+)
 
 
 def load_cookie_header(cookie_file: str | Path) -> str:
-    """从文件读取 Cookie header。
-
-    支持两种格式：
-    - 文件内容就是完整 Cookie header
-    - DevTools 抓包文本中单独一行 `cookie` 后跟 Cookie header
-    """
     path = Path(cookie_file)
     text = path.read_text(encoding="utf-8").strip()
     lines = [line.strip() for line in text.splitlines()]
@@ -40,7 +32,6 @@ def load_cookie_header(cookie_file: str | Path) -> str:
 
 
 def extract_session_id(cookie_header: str) -> str:
-    """从 Cookie header 提取 Steam sessionid。"""
     cookies = SimpleCookie()
     cookies.load(cookie_header)
     if "sessionid" not in cookies:
@@ -49,47 +40,110 @@ def extract_session_id(cookie_header: str) -> str:
 
 
 class DeveloperReplyClient:
-    """Steam Community 开发者回复客户端。"""
+    """Steam Community developer reply client with sticky-session proxy support."""
 
     def __init__(
         self,
         cookie_header: str,
-        session_id: Optional[str] = None,
-        config: Optional[Config] = None,
-    ):
+        session_id: str | None = None,
+        config: Config | None = None,
+        proxy_session_port: int | None = None,
+    ) -> None:
         self.config = config or get_config()
         self.cookie_header = cookie_header
         self.session_id = session_id or extract_session_id(cookie_header)
-        self._client: Optional[httpx.AsyncClient] = None
+        self._direct_client: httpx.AsyncClient | None = None
+        self._proxy_client: httpx.AsyncClient | None = None
+        self._proxy_session_port = proxy_session_port
+        self._last_request_metadata = build_proxy_log_fields("sticky_session")
 
-    async def _get_client(self) -> httpx.AsyncClient:
-        if self._client is None:
-            headers = {
-                "User-Agent": self.config.http.user_agent,
-                "Cookie": self.cookie_header,
-                "Origin": "https://steamcommunity.com",
-                "Referer": "https://steamcommunity.com/",
-                "X-Requested-With": "XMLHttpRequest",
-            }
-            self._client = httpx.AsyncClient(
-                headers=headers,
-                timeout=httpx.Timeout(max(float(self.config.http.timeout), 60.0)),
-                verify=False,
+    def _build_headers(self) -> dict[str, str]:
+        return {
+            "User-Agent": self.config.http.user_agent,
+            "Cookie": self.cookie_header,
+            "Origin": "https://steamcommunity.com",
+            "Referer": "https://steamcommunity.com/",
+            "X-Requested-With": "XMLHttpRequest",
+        }
+
+    def _create_client(self, *, proxy: str | None = None) -> httpx.AsyncClient:
+        return httpx.AsyncClient(
+            headers=self._build_headers(),
+            timeout=httpx.Timeout(max(float(self.config.http.timeout), 60.0)),
+            verify=False,
+            proxy=proxy,
+        )
+
+    async def _get_direct_client(self) -> httpx.AsyncClient:
+        if self._direct_client is None:
+            self._direct_client = self._create_client()
+        return self._direct_client
+
+    async def _get_proxy_client(self) -> httpx.AsyncClient:
+        if self._proxy_client is None:
+            settings = load_oxylabs_proxy_settings()
+            if self._proxy_session_port is None:
+                self._proxy_session_port = settings.choose_sticky_session_port()
+            proxy_url = settings.build_sticky_proxy_url(session_port=self._proxy_session_port)
+            self._proxy_client = self._create_client(proxy=proxy_url)
+        return self._proxy_client
+
+    async def _post_with_optional_proxy(
+        self,
+        url: str,
+        *,
+        data: dict[str, Any],
+    ) -> httpx.Response:
+        settings = load_oxylabs_proxy_settings()
+        if not settings.is_active_for_mode("sticky_session"):
+            self._last_request_metadata = build_proxy_log_fields(
+                "sticky_session",
+                settings=settings,
             )
-        return self._client
+            client = await self._get_direct_client()
+            return await client.post(url, data=data)
+
+        if self._proxy_session_port is None:
+            self._proxy_session_port = settings.choose_sticky_session_port()
+        metadata = build_proxy_log_fields(
+            "sticky_session",
+            settings=settings,
+            session_port=self._proxy_session_port,
+        )
+        try:
+            client = await self._get_proxy_client()
+            response = await client.post(url, data=data)
+            self._last_request_metadata = metadata
+            return response
+        except httpx.RequestError as proxy_exc:
+            if not settings.direct_fallback:
+                self._last_request_metadata = build_proxy_log_fields(
+                    "sticky_session",
+                    settings=settings,
+                    session_port=self._proxy_session_port,
+                    proxy_error=proxy_exc,
+                )
+                raise
+            self._last_request_metadata = build_proxy_log_fields(
+                "sticky_session",
+                settings=settings,
+                session_port=self._proxy_session_port,
+                fallback_used=True,
+                proxy_error=proxy_exc,
+            )
+            client = await self._get_direct_client()
+            return await client.post(url, data=data)
 
     async def set_developer_response(
         self,
         recommendation_id: str,
         response_text: str,
     ) -> dict[str, Any]:
-        """为单条评测设置开发者回复。"""
-        client = await self._get_client()
         url = (
             "https://steamcommunity.com/userreviews/setdeveloperresponse/"
             f"{recommendation_id}"
         )
-        response = await client.post(
+        response = await self._post_with_optional_proxy(
             url,
             data={
                 "developer_response": response_text,
@@ -104,20 +158,29 @@ class DeveloperReplyClient:
             "response": data,
         }
 
+    def get_last_request_metadata(self) -> dict[str, Any]:
+        return dict(self._last_request_metadata)
+
+    @property
+    def proxy_session_port(self) -> int | None:
+        return self._proxy_session_port
+
     async def close(self) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        if self._proxy_client is not None:
+            await self._proxy_client.aclose()
+            self._proxy_client = None
+        if self._direct_client is not None:
+            await self._direct_client.aclose()
+            self._direct_client = None
 
 
 async def reply_to_reviews(
     client: DeveloperReplyClient,
     reviews: list[dict[str, Any]],
     response_text: str,
-    limit: Optional[int] = None,
+    limit: int | None = None,
     delay_seconds: float = 0.5,
 ) -> list[dict[str, Any]]:
-    """按顺序回复评测列表。"""
     results: list[dict[str, Any]] = []
     target_reviews = reviews[:limit] if limit is not None else reviews
 

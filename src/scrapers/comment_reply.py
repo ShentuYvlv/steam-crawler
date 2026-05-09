@@ -54,7 +54,7 @@ class DeveloperReplyClient:
         self.cookie_header = cookie_header
         self.session_id = session_id or extract_session_id(cookie_header)
         self._direct_client: httpx.AsyncClient | None = None
-        self._proxy_client: httpx.AsyncClient | None = None
+        self._proxy_clients: dict[str, httpx.AsyncClient] = {}
         self._proxy_session_port = proxy_session_port
         self._last_request_metadata = build_proxy_log_fields("sticky_session")
         self._proxy_location_cache: dict[str, Any] | None = None
@@ -81,14 +81,19 @@ class DeveloperReplyClient:
             self._direct_client = self._create_client()
         return self._direct_client
 
-    async def _get_proxy_client(self) -> httpx.AsyncClient:
-        if self._proxy_client is None:
+    async def _get_proxy_client(self, *, proxy_scheme: str) -> httpx.AsyncClient:
+        client = self._proxy_clients.get(proxy_scheme)
+        if client is None:
             settings = load_oxylabs_proxy_settings()
             if self._proxy_session_port is None:
                 self._proxy_session_port = settings.choose_sticky_session_port()
-            proxy_url = settings.build_sticky_proxy_url(session_port=self._proxy_session_port)
-            self._proxy_client = self._create_client(proxy=proxy_url)
-        return self._proxy_client
+            proxy_url = settings.build_sticky_proxy_url(
+                session_port=self._proxy_session_port,
+                scheme_override=proxy_scheme,
+            )
+            client = self._create_client(proxy=proxy_url)
+            self._proxy_clients[proxy_scheme] = client
+        return client
 
     async def _post_with_optional_proxy(
         self,
@@ -112,29 +117,41 @@ class DeveloperReplyClient:
             settings=settings,
             session_port=self._proxy_session_port,
         )
-        try:
-            client = await self._get_proxy_client()
-            response = await client.post(url, data=data)
-            self._last_request_metadata = metadata
-            return response
-        except httpx.RequestError as proxy_exc:
-            if not settings.direct_fallback:
-                self._last_request_metadata = build_proxy_log_fields(
-                    "sticky_session",
-                    settings=settings,
-                    session_port=self._proxy_session_port,
-                    proxy_error=proxy_exc,
-                )
-                raise
+        last_proxy_exception: httpx.RequestError | None = None
+        for proxy_scheme, _proxy_url in settings.proxy_url_candidates(
+            "sticky_session",
+            session_port=self._proxy_session_port,
+        ):
+            metadata = build_proxy_log_fields(
+                "sticky_session",
+                settings=settings,
+                session_port=self._proxy_session_port,
+                proxy_scheme=proxy_scheme,
+            )
+            try:
+                client = await self._get_proxy_client(proxy_scheme=proxy_scheme)
+                response = await client.post(url, data=data)
+                self._last_request_metadata = metadata
+                return response
+            except httpx.RequestError as proxy_exc:
+                last_proxy_exception = proxy_exc
+        if not settings.direct_fallback:
             self._last_request_metadata = build_proxy_log_fields(
                 "sticky_session",
                 settings=settings,
                 session_port=self._proxy_session_port,
-                fallback_used=True,
-                proxy_error=proxy_exc,
+                proxy_error=last_proxy_exception,
             )
-            client = await self._get_direct_client()
-            return await client.post(url, data=data)
+            raise last_proxy_exception  # type: ignore[misc]
+        self._last_request_metadata = build_proxy_log_fields(
+            "sticky_session",
+            settings=settings,
+            session_port=self._proxy_session_port,
+            fallback_used=True,
+            proxy_error=last_proxy_exception,
+        )
+        client = await self._get_direct_client()
+        return await client.post(url, data=data)
 
     async def set_developer_response(
         self,
@@ -167,10 +184,13 @@ class DeveloperReplyClient:
         if self._proxy_location_cache is None:
             settings = load_oxylabs_proxy_settings()
             if settings.is_active_for_mode("sticky_session"):
-                proxy_client = await self._get_proxy_client()
+                proxy_client = await self._get_proxy_client(
+                    proxy_scheme=self.get_last_request_metadata().get("proxy_scheme") or settings.scheme
+                )
                 self._proxy_location_cache = await fetch_proxy_location(
                     "sticky_session",
                     session_port=self._proxy_session_port,
+                    proxy_scheme=self.get_last_request_metadata().get("proxy_scheme") or settings.scheme,
                     existing_client=proxy_client,
                 )
             else:
@@ -185,9 +205,9 @@ class DeveloperReplyClient:
         return self._proxy_session_port
 
     async def close(self) -> None:
-        if self._proxy_client is not None:
-            await self._proxy_client.aclose()
-            self._proxy_client = None
+        for client in self._proxy_clients.values():
+            await client.aclose()
+        self._proxy_clients.clear()
         if self._direct_client is not None:
             await self._direct_client.aclose()
             self._direct_client = None

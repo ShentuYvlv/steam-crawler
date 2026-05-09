@@ -239,6 +239,7 @@ export type ProxyModeStatus = {
   proxy_mode: string;
   proxy_port_type: string;
   proxy_port: number | null;
+  proxy_scheme: string | null;
   proxy_fallback_enabled: boolean;
   proxy_fallback_used: boolean;
   proxy_error: string | null;

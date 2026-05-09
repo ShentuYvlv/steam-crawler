@@ -18,6 +18,7 @@ async def fetch_proxy_location(
     proxy_mode: ProxyMode,
     *,
     session_port: int | None = None,
+    proxy_scheme: str | None = None,
     existing_client: httpx.AsyncClient | None = None,
     timeout_seconds: float = 20.0,
 ) -> dict[str, Any]:
@@ -26,6 +27,7 @@ async def fetch_proxy_location(
         proxy_mode,
         settings=settings,
         session_port=session_port,
+        proxy_scheme=proxy_scheme,
     )
     exact_ip = proxy_mode == "sticky_session"
     note = (
@@ -65,33 +67,38 @@ async def fetch_proxy_location(
                 "proxy_error": str(exc) or type(exc).__name__,
             }
 
-    proxy_url = (
-        settings.build_sticky_proxy_url(session_port=session_port)
-        if proxy_mode == "sticky_session" and session_port is not None
-        else settings.build_rotating_proxy_url()
-    )
-    try:
-        async with httpx.AsyncClient(
-            proxy=proxy_url,
-            timeout=httpx.Timeout(timeout_seconds),
-            verify=False,
-        ) as client:
-            response = await client.get(LOCATION_URL)
-            response.raise_for_status()
-            payload = response.json()
-            return {
-                **base,
-                "ok": True,
-                "exact_ip": exact_ip,
-                "note": note,
-                "location": payload,
-            }
-    except Exception as exc:
-        return {
-            **base,
-            "ok": False,
-            "exact_ip": exact_ip,
-            "note": note,
-            "location": None,
-            "proxy_error": str(exc) or type(exc).__name__,
-        }
+    last_error: Exception | None = None
+    for proxy_scheme, proxy_url in settings.proxy_url_candidates(
+        proxy_mode,
+        session_port=session_port,
+    ):
+        try:
+            async with httpx.AsyncClient(
+                proxy=proxy_url,
+                timeout=httpx.Timeout(timeout_seconds),
+                verify=False,
+            ) as client:
+                response = await client.get(LOCATION_URL)
+                response.raise_for_status()
+                payload = response.json()
+                return {
+                    **base,
+                    "proxy_scheme": proxy_scheme,
+                    "ok": True,
+                    "exact_ip": exact_ip,
+                    "note": note,
+                    "location": payload,
+                }
+        except Exception as exc:
+            last_error = exc
+    error_message = None
+    if last_error is not None:
+        error_message = str(last_error) or type(last_error).__name__
+    return {
+        **base,
+        "ok": False,
+        "exact_ip": exact_ip,
+        "note": note,
+        "location": None,
+        "proxy_error": error_message,
+    }

@@ -102,6 +102,51 @@ async def test_async_http_client_falls_back_to_direct_when_proxy_fails(monkeypat
     assert metadata["proxy_error"] == "proxy failed"
 
 
+async def test_async_http_client_falls_back_to_http_proxy_scheme_before_direct(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_proxy_env(monkeypatch, enabled=True)
+    created_proxies: list[str | None] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, proxy=None, **kwargs):
+            self.proxy = proxy
+            created_proxies.append(proxy)
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return None
+
+        async def get(self, url, params=None):
+            if self.proxy is None:
+                raise AssertionError("direct fallback should not be used")
+            if str(self.proxy).startswith("https://"):
+                raise httpx.ProxyError("[SSL] record layer failure (_ssl.c:1016)")
+            return _response("GET", url, {"success": 1})
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr("src.utils.http_client.httpx.AsyncClient", FakeAsyncClient)
+
+    config = Config()
+    config.http.max_retries = 0
+    client = AsyncHttpClient(config, proxy_mode="rotate_per_request")
+    try:
+        response = await client.get("https://example.com", delay=False)
+        metadata = client.get_last_request_metadata()
+    finally:
+        await client.close()
+
+    assert response.json()["success"] == 1
+    assert any(proxy and str(proxy).startswith("https://") for proxy in created_proxies)
+    assert any(proxy and str(proxy).startswith("http://") for proxy in created_proxies)
+    assert metadata["proxy_scheme"] == "http"
+    assert metadata["proxy_fallback_used"] is False
+
+
 async def test_async_http_client_raises_direct_error_when_proxy_and_direct_both_fail(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -203,6 +248,43 @@ async def test_developer_reply_client_reuses_single_sticky_session_port(
     proxied_clients = [proxy for proxy in created_proxies if proxy is not None]
     assert client.proxy_session_port == 35467
     assert proxied_clients == ["https://user-zed00_NwCdm-country-US:123456789Nb%3D@dc.oxylabs.io:35467"]
+
+
+async def test_developer_reply_client_falls_back_to_http_sticky_proxy_scheme(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _set_proxy_env(monkeypatch, enabled=True)
+    monkeypatch.setattr("src.utils.oxylabs_proxy.random.randint", lambda start, end: 35467)
+    created_proxies: list[str | None] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, proxy=None, **kwargs):
+            self.proxy = proxy
+            created_proxies.append(proxy)
+
+        async def post(self, url, data=None):
+            if self.proxy is None:
+                raise AssertionError("direct fallback should not be used")
+            if str(self.proxy).startswith("https://"):
+                raise httpx.ProxyError("[SSL] record layer failure (_ssl.c:1016)")
+            return _response("POST", url, {"success": 1})
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr("src.scrapers.comment_reply.httpx.AsyncClient", FakeAsyncClient)
+
+    client = DeveloperReplyClient("sessionid=abc")
+    try:
+        result = await client.set_developer_response("1001", "hello")
+        metadata = client.get_last_request_metadata()
+    finally:
+        await client.close()
+
+    assert result["success"] is True
+    assert any(proxy and str(proxy).startswith("https://") for proxy in created_proxies)
+    assert any(proxy and str(proxy).startswith("http://") for proxy in created_proxies)
+    assert metadata["proxy_scheme"] == "http"
 
 
 async def test_probe_uses_same_rotating_proxy_strategy_as_scraping(

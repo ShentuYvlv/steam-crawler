@@ -111,7 +111,10 @@ class CommentScraper:
                 self._transport_diagnostics = {
                     **self.client.get_last_request_metadata(),
                     **(
-                        await fetch_proxy_location("rotate_per_request")
+                        await fetch_proxy_location(
+                            "rotate_per_request",
+                            proxy_scheme=self.client.get_last_request_metadata().get("proxy_scheme"),
+                        )
                         if self.client.get_last_request_metadata().get("proxy_enabled")
                         else {}
                     ),

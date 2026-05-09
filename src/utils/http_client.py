@@ -43,7 +43,7 @@ class AsyncHttpClient:
         self.proxy_mode = proxy_mode
         self._sticky_session_port = sticky_session_port
         self._direct_client: httpx.AsyncClient | None = None
-        self._sticky_proxy_client: httpx.AsyncClient | None = None
+        self._sticky_proxy_clients: dict[str, httpx.AsyncClient] = {}
         self._last_request_metadata = build_proxy_log_fields(self.proxy_mode)
 
     async def _get_direct_client(self) -> httpx.AsyncClient:
@@ -51,14 +51,19 @@ class AsyncHttpClient:
             self._direct_client = self._create_client()
         return self._direct_client
 
-    async def _get_sticky_proxy_client(self) -> httpx.AsyncClient:
-        if self._sticky_proxy_client is None:
+    async def _get_sticky_proxy_client(self, *, proxy_scheme: str) -> httpx.AsyncClient:
+        client = self._sticky_proxy_clients.get(proxy_scheme)
+        if client is None:
             settings = load_oxylabs_proxy_settings()
             if self._sticky_session_port is None:
                 self._sticky_session_port = settings.choose_sticky_session_port()
-            proxy_url = settings.build_sticky_proxy_url(session_port=self._sticky_session_port)
-            self._sticky_proxy_client = self._create_client(proxy=proxy_url)
-        return self._sticky_proxy_client
+            proxy_url = settings.build_sticky_proxy_url(
+                session_port=self._sticky_session_port,
+                scheme_override=proxy_scheme,
+            )
+            client = self._create_client(proxy=proxy_url)
+            self._sticky_proxy_clients[proxy_scheme] = client
+        return client
 
     def _create_client(self, *, proxy: str | None = None) -> httpx.AsyncClient:
         limits = httpx.Limits(
@@ -95,8 +100,10 @@ class AsyncHttpClient:
         self,
         url: str,
         params: dict[str, Any] | None = None,
+        *,
+        proxy_scheme: str,
     ) -> httpx.Response:
-        client = await self._get_sticky_proxy_client()
+        client = await self._get_sticky_proxy_client(proxy_scheme=proxy_scheme)
         return await client.get(url, params=params)
 
     async def _send_request(
@@ -113,64 +120,77 @@ class AsyncHttpClient:
             return await self._send_with_direct_client(url, params=params)
 
         if self.proxy_mode == "rotate_per_request":
-            proxy_url = settings.build_rotating_proxy_url()
-            metadata = build_proxy_log_fields(
-                self.proxy_mode,
-                settings=settings,
-                session_port=None,
-            )
-            try:
-                response = await self._send_with_rotating_proxy(
-                    url,
-                    params=params,
-                    proxy_url=proxy_url,
-                )
-                self._last_request_metadata = metadata
-                return response
-            except httpx.RequestError as proxy_exc:
-                if not settings.direct_fallback:
-                    self._last_request_metadata = build_proxy_log_fields(
-                        self.proxy_mode,
-                        settings=settings,
-                        proxy_error=proxy_exc,
-                    )
-                    raise
-                self._last_request_metadata = build_proxy_log_fields(
+            last_proxy_exception: httpx.RequestError | None = None
+            for proxy_scheme, proxy_url in settings.proxy_url_candidates("rotate_per_request"):
+                metadata = build_proxy_log_fields(
                     self.proxy_mode,
                     settings=settings,
-                    fallback_used=True,
-                    proxy_error=proxy_exc,
+                    proxy_scheme=proxy_scheme,
                 )
-                return await self._send_with_direct_client(url, params=params)
-
-        if self._sticky_session_port is None:
-            self._sticky_session_port = settings.choose_sticky_session_port()
-        metadata = build_proxy_log_fields(
-            self.proxy_mode,
-            settings=settings,
-            session_port=self._sticky_session_port,
-        )
-        try:
-            response = await self._send_with_sticky_proxy(url, params=params)
-            self._last_request_metadata = metadata
-            return response
-        except httpx.RequestError as proxy_exc:
+                try:
+                    response = await self._send_with_rotating_proxy(
+                        url,
+                        params=params,
+                        proxy_url=proxy_url,
+                    )
+                    self._last_request_metadata = metadata
+                    return response
+                except httpx.RequestError as proxy_exc:
+                    last_proxy_exception = proxy_exc
             if not settings.direct_fallback:
                 self._last_request_metadata = build_proxy_log_fields(
                     self.proxy_mode,
                     settings=settings,
-                    session_port=self._sticky_session_port,
-                    proxy_error=proxy_exc,
+                    proxy_error=last_proxy_exception,
                 )
-                raise
+                raise last_proxy_exception  # type: ignore[misc]
+            self._last_request_metadata = build_proxy_log_fields(
+                self.proxy_mode,
+                settings=settings,
+                fallback_used=True,
+                proxy_error=last_proxy_exception,
+            )
+            return await self._send_with_direct_client(url, params=params)
+
+        if self._sticky_session_port is None:
+            self._sticky_session_port = settings.choose_sticky_session_port()
+        last_proxy_exception: httpx.RequestError | None = None
+        for proxy_scheme, _proxy_url in settings.proxy_url_candidates(
+            "sticky_session",
+            session_port=self._sticky_session_port,
+        ):
+            metadata = build_proxy_log_fields(
+                self.proxy_mode,
+                settings=settings,
+                session_port=self._sticky_session_port,
+                proxy_scheme=proxy_scheme,
+            )
+            try:
+                response = await self._send_with_sticky_proxy(
+                    url,
+                    params=params,
+                    proxy_scheme=proxy_scheme,
+                )
+                self._last_request_metadata = metadata
+                return response
+            except httpx.RequestError as proxy_exc:
+                last_proxy_exception = proxy_exc
+        if not settings.direct_fallback:
             self._last_request_metadata = build_proxy_log_fields(
                 self.proxy_mode,
                 settings=settings,
                 session_port=self._sticky_session_port,
-                fallback_used=True,
-                proxy_error=proxy_exc,
+                proxy_error=last_proxy_exception,
             )
-            return await self._send_with_direct_client(url, params=params)
+            raise last_proxy_exception  # type: ignore[misc]
+        self._last_request_metadata = build_proxy_log_fields(
+            self.proxy_mode,
+            settings=settings,
+            session_port=self._sticky_session_port,
+            fallback_used=True,
+            proxy_error=last_proxy_exception,
+        )
+        return await self._send_with_direct_client(url, params=params)
 
     async def get(
         self,
@@ -245,9 +265,9 @@ class AsyncHttpClient:
             raise TaskCancelledError()
 
     async def close(self) -> None:
-        if self._sticky_proxy_client is not None:
-            await self._sticky_proxy_client.aclose()
-            self._sticky_proxy_client = None
+        for client in self._sticky_proxy_clients.values():
+            await client.aclose()
+        self._sticky_proxy_clients.clear()
         if self._direct_client is not None:
             await self._direct_client.aclose()
             self._direct_client = None

@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Optional
 
 from src.config import Config, get_config
@@ -17,6 +18,9 @@ from src.utils.http_client import AsyncHttpClient
 
 if TYPE_CHECKING:
     from src.utils.ui import UIManager
+
+
+PageCallback = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class CommentScraper:
@@ -72,6 +76,8 @@ class CommentScraper:
         purchase_type: str = "all",
         num_per_page: int = 100,
         use_review_quality: bool = True,
+        on_page: Optional[PageCallback] = None,
+        collect_reviews: bool = True,
     ) -> dict[str, Any]:
         """抓取单个游戏的逐条评论。"""
         url = f"https://store.steampowered.com/ajaxappreviews/{app_id}"
@@ -80,6 +86,8 @@ class CommentScraper:
         query_summary: dict[str, Any] = {}
         seen_recommendation_ids: set[str] = set()
         reached_since_timestamp = False
+        total_review_count = 0
+        page_index = 0
 
         while True:
             if self.stop_event and self.stop_event.is_set():
@@ -107,6 +115,7 @@ class CommentScraper:
                 break
 
             added = 0
+            page_batch: list[dict[str, Any]] = []
             for review in page_reviews:
                 timestamp_created = self._parse_timestamp(review.get("timestamp_created"))
                 if since_timestamp is not None and timestamp_created is not None:
@@ -120,14 +129,31 @@ class CommentScraper:
 
                 if recommendation_id:
                     seen_recommendation_ids.add(recommendation_id)
-                reviews.append(review)
+                if collect_reviews:
+                    reviews.append(review)
+                page_batch.append(review)
                 added += 1
+                total_review_count += 1
 
-                if limit is not None and len(reviews) >= limit:
+                if limit is not None and total_review_count >= limit:
                     break
 
-            if limit is not None and len(reviews) >= limit:
-                reviews = reviews[:limit]
+            if page_batch and on_page is not None:
+                page_index += 1
+                await on_page(
+                    {
+                        "app_id": app_id,
+                        "page_index": page_index,
+                        "page_review_count": len(page_batch),
+                        "total_review_count": total_review_count,
+                        "query_summary": query_summary,
+                        "reviews": page_batch,
+                    }
+                )
+
+            if limit is not None and total_review_count >= limit:
+                if collect_reviews:
+                    reviews = reviews[:limit]
                 break
 
             if reached_since_timestamp:
@@ -142,7 +168,7 @@ class CommentScraper:
         return {
             "app_id": app_id,
             "query_summary": query_summary,
-            "review_count": len(reviews),
+            "review_count": total_review_count if not collect_reviews else len(reviews),
             "reviews": reviews,
         }
 

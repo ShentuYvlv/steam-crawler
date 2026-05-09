@@ -93,6 +93,56 @@ class BlockingScraper:
         return None
 
 
+class StreamingScraper:
+    async def scrape_app_comments(self, **kwargs):
+        on_page = kwargs.get("on_page")
+        if on_page is not None:
+            await on_page(
+                {
+                    "page_index": 1,
+                    "total_review_count": 1,
+                    "reviews": [
+                        {
+                            "recommendationid": "streaming-1",
+                            "author": {
+                                "steamid": "76561190000000001",
+                                "personaname": "streamer",
+                                "profile_url": "https://steamcommunity.com/profiles/76561190000000001/",
+                                "num_games_owned": 1,
+                                "num_reviews": 1,
+                                "playtime_forever": 30,
+                                "playtime_last_two_weeks": 30,
+                                "playtime_at_review": 30,
+                                "last_played": 1777181180,
+                            },
+                            "language": "schinese",
+                            "review": "streaming review",
+                            "timestamp_created": 1777258404,
+                            "timestamp_updated": 1777258793,
+                            "voted_up": True,
+                            "votes_up": 1,
+                            "votes_funny": 0,
+                            "weighted_vote_score": "0.5",
+                            "comment_count": 0,
+                            "steam_purchase": True,
+                            "received_for_free": False,
+                            "refunded": False,
+                            "written_during_early_access": False,
+                        }
+                    ],
+                }
+            )
+        return {
+            "app_id": kwargs["app_id"],
+            "query_summary": {"total_reviews": 1},
+            "review_count": 1,
+            "reviews": [],
+        }
+
+    async def close(self) -> None:
+        return None
+
+
 async def test_review_sync_service_upserts_reviews_and_records_job() -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
@@ -233,3 +283,27 @@ async def test_review_sync_service_commits_running_state_before_scrape_finishes(
     await engine.dispose()
 
     assert result.status == "success"
+
+
+async def test_review_sync_service_streams_reviews_into_database_during_scrape() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        service = SteamReviewSyncService(session, scraper_factory=StreamingScraper)
+        result = await service.sync_reviews(ReviewSyncOptions(app_id=3350200))
+
+        reviews = (await session.execute(select(SteamReview))).scalars().all()
+        job = (await session.execute(select(SyncJob))).scalar_one()
+        logs = (await session.execute(select(TaskLog).order_by(TaskLog.id))).scalars().all()
+
+    await engine.dispose()
+
+    assert result.status == "success"
+    assert result.inserted == 1
+    assert len(reviews) == 1
+    assert reviews[0].recommendation_id == "streaming-1"
+    assert job.inserted_count == 1
+    assert any(log.message == "评论同步完成" for log in logs)

@@ -1,4 +1,4 @@
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -17,6 +17,7 @@ from app.services.task_logs import add_task_log
 from app.services.task_runtime import finalize_cancelled_task
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
+PROGRESS_LOG_INTERVAL = 500
 
 
 class CommentScraperProtocol(Protocol):
@@ -31,6 +32,8 @@ class CommentScraperProtocol(Protocol):
         purchase_type: str = "all",
         num_per_page: int = 100,
         use_review_quality: bool = True,
+        on_page: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        collect_reviews: bool = True,
     ) -> dict[str, Any]:
         ...
 
@@ -113,6 +116,8 @@ class SteamReviewSyncService:
         updated = 0
         skipped = 0
         query_summary: dict[str, Any] = {}
+        page_callback_invoked = False
+        next_progress_log_threshold = PROGRESS_LOG_INTERVAL
         scraper = self._create_scraper()
         latest_review = await self.get_latest_review(options.app_id)
         latest_review_created_at = latest_review.timestamp_created if latest_review else None
@@ -145,6 +150,64 @@ class SteamReviewSyncService:
         await self.session.commit()
 
         try:
+            async def persist_reviews_batch(
+                reviews_batch: list[dict[str, Any]],
+                *,
+                page_index: int | None = None,
+                total_review_count: int | None = None,
+            ) -> None:
+                nonlocal inserted, updated, skipped, page_callback_invoked, next_progress_log_threshold
+                page_callback_invoked = True
+                await self._raise_if_cancelled(sync_job)
+                for review in reviews_batch:
+                    await self._raise_if_cancelled(sync_job)
+                    values = steam_api_review_to_values(options.app_id, review)
+                    upsert_result = await self.repository.upsert_review(values)
+                    inserted += upsert_result.inserted
+                    updated += upsert_result.updated
+                    skipped += upsert_result.skipped
+
+                sync_job.inserted_count = inserted
+                sync_job.updated_count = updated
+                sync_job.skipped_count = skipped
+
+                if (
+                    total_review_count is not None
+                    and total_review_count >= next_progress_log_threshold
+                ):
+                    await add_task_log(
+                        self.session,
+                        sync_job.id,
+                        "评论同步进行中",
+                        details={
+                            "page_index": page_index,
+                            "fetched": total_review_count,
+                            "inserted": inserted,
+                            "updated": updated,
+                            "skipped": skipped,
+                            "sync_mode": sync_mode,
+                        },
+                    )
+                    while total_review_count >= next_progress_log_threshold:
+                        next_progress_log_threshold += PROGRESS_LOG_INTERVAL
+
+                await self.session.commit()
+
+            async def handle_page(page_payload: dict[str, Any]) -> None:
+                await persist_reviews_batch(
+                    list(page_payload.get("reviews", [])),
+                    page_index=(
+                        int(page_payload["page_index"])
+                        if page_payload.get("page_index") is not None
+                        else None
+                    ),
+                    total_review_count=(
+                        int(page_payload["total_review_count"])
+                        if page_payload.get("total_review_count") is not None
+                        else None
+                    ),
+                )
+
             await self._raise_if_cancelled(sync_job)
             result = await scraper.scrape_app_comments(
                 app_id=options.app_id,
@@ -156,6 +219,8 @@ class SteamReviewSyncService:
                 purchase_type=options.purchase_type,
                 num_per_page=options.per_page,
                 use_review_quality=options.use_review_quality,
+                on_page=handle_page,
+                collect_reviews=False,
             )
             query_summary = result.get("query_summary") or {}
             query_summary["local_latest_review_created_at"] = (
@@ -163,12 +228,13 @@ class SteamReviewSyncService:
             )
             query_summary["since_timestamp"] = since_timestamp
 
-            for review in result.get("reviews", []):
-                values = steam_api_review_to_values(options.app_id, review)
-                upsert_result = await self.repository.upsert_review(values)
-                inserted += upsert_result.inserted
-                updated += upsert_result.updated
-                skipped += upsert_result.skipped
+            if not page_callback_invoked:
+                await persist_reviews_batch(
+                    list(result.get("reviews", [])),
+                    total_review_count=(
+                        int(result["review_count"]) if result.get("review_count") is not None else None
+                    ),
+                )
 
             sync_job.status = "success"
             sync_job.inserted_count = inserted
@@ -180,6 +246,7 @@ class SteamReviewSyncService:
                 sync_job.id,
                 "评论同步完成",
                 details={
+                    "fetched": result.get("review_count", inserted + updated + skipped),
                     "inserted": inserted,
                     "updated": updated,
                     "skipped": skipped,

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+import httpx
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -48,6 +49,40 @@ class DeveloperReplyService:
         self.session = session
         self.client_factory = client_factory or create_steam_reply_client
         self.last_transport_diagnostics: dict[str, Any] | None = None
+
+    def _collect_transport_metadata(
+        self,
+        client: SteamDeveloperReplyClient | None,
+    ) -> dict[str, Any]:
+        metadata = dict(self.last_transport_diagnostics or {})
+        if client is not None:
+            metadata_getter = getattr(client, "get_last_request_metadata", None)
+            if callable(metadata_getter):
+                try:
+                    metadata.update(metadata_getter())
+                except Exception:
+                    pass
+        return metadata
+
+    def _build_send_error_message(
+        self,
+        exc: Exception,
+        client: SteamDeveloperReplyClient | None,
+    ) -> str:
+        metadata = self._collect_transport_metadata(client)
+        if isinstance(exc, httpx.ConnectTimeout):
+            if metadata.get("proxy_enabled"):
+                return (
+                    "ConnectTimeout: 无法连接 steamcommunity.com。"
+                    f" 当前发送链路使用代理模式 {metadata.get('proxy_mode')}"
+                    f" ({metadata.get('proxy_scheme') or 'unknown'}:{metadata.get('proxy_port') or 'n/a'})，"
+                    " 请检查代理可用性，或关闭代理后验证服务器直连。"
+                )
+            return (
+                "ConnectTimeout: 服务器无法连接 steamcommunity.com。"
+                " 请检查 DNS 解析、IPv6/IPv4 连通性、服务器出口网络，或为发送链路配置代理。"
+            )
+        return format_exception_message(exc)
 
     async def send_reply(
         self,
@@ -193,7 +228,8 @@ class DeveloperReplyService:
             await self.session.refresh(record)
             return record
         except Exception as exc:
-            message = format_exception_message(exc)
+            transport_metadata = self._collect_transport_metadata(client)
+            message = self._build_send_error_message(exc, client)
             record.status = "failed"
             record.error_message = message
             review.reply_status = "send_failed"
@@ -202,9 +238,10 @@ class DeveloperReplyService:
                 draft.error_message = message
             await self.session.commit()
             logger.exception(
-                "Steam developer reply send failed for record_id=%s review_id=%s",
+                "Steam developer reply send failed for record_id=%s review_id=%s transport=%s",
                 record.id,
                 review.id,
+                transport_metadata,
             )
             raise DeveloperReplyError(message, record.id) from exc
         finally:

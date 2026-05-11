@@ -1,7 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
-import { CheckCircle2, Clock3, MessageSquareMore, RefreshCcw, ShieldCheck, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  Clock3,
+  Gamepad2,
+  MessageSquareMore,
+  RefreshCcw,
+  Trash2,
+} from "lucide-react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -54,7 +62,12 @@ function ReplyRecordsPage() {
   });
 
   const gameSummaries = useMemo(
-    () => buildGameSummaries(auditQueueQuery.data ?? [], recordsQuery.data ?? [], gamesQuery.data ?? []),
+    () =>
+      buildGameSummaries(
+        auditQueueQuery.data ?? [],
+        recordsQuery.data ?? [],
+        gamesQuery.data ?? [],
+      ),
     [auditQueueQuery.data, recordsQuery.data, gamesQuery.data],
   );
 
@@ -63,13 +76,21 @@ function ReplyRecordsPage() {
       setSelectedAppId(null);
       return;
     }
-    if (selectedAppId === null || !gameSummaries.some((game) => game.appId === selectedAppId)) {
+    if (
+      selectedAppId === null ||
+      !gameSummaries.some((game) => game.appId === selectedAppId)
+    ) {
       setSelectedAppId(gameSummaries[0].appId);
     }
   }, [gameSummaries, selectedAppId]);
 
   const daySummaries = useMemo(
-    () => buildDaySummaries(selectedAppId, auditQueueQuery.data ?? [], recordsQuery.data ?? []),
+    () =>
+      buildDaySummaries(
+        selectedAppId,
+        auditQueueQuery.data ?? [],
+        recordsQuery.data ?? [],
+      ),
     [selectedAppId, auditQueueQuery.data, recordsQuery.data],
   );
 
@@ -78,7 +99,10 @@ function ReplyRecordsPage() {
       setSelectedDayKey(null);
       return;
     }
-    if (selectedDayKey === null || !daySummaries.some((day) => day.dayKey === selectedDayKey)) {
+    if (
+      selectedDayKey === null ||
+      !daySummaries.some((day) => day.dayKey === selectedDayKey)
+    ) {
       setSelectedDayKey(daySummaries[0].dayKey);
     }
   }, [daySummaries, selectedDayKey]);
@@ -99,10 +123,11 @@ function ReplyRecordsPage() {
     return [...(auditQueueQuery.data ?? [])]
       .filter(
         (item) =>
-          item.app_id === selectedAppId &&
-          getDraftDayKey(item) === selectedDayKey,
+          item.app_id === selectedAppId && getDraftDayKey(item) === selectedDayKey,
       )
-      .sort((left, right) => compareTimestamps(getDraftTimestamp(right), getDraftTimestamp(left)));
+      .sort((left, right) =>
+        compareTimestamps(getDraftTimestamp(right), getDraftTimestamp(left)),
+      );
   }, [auditQueueQuery.data, selectedAppId, selectedDayKey]);
 
   const selectedSentRecords = useMemo(() => {
@@ -115,139 +140,108 @@ function ReplyRecordsPage() {
           (item.app_id ?? 0) === selectedAppId &&
           getRecordDayKey(item) === selectedDayKey,
       )
-      .sort((left, right) => compareTimestamps(getRecordTimestamp(right), getRecordTimestamp(left)));
+      .sort((left, right) =>
+        compareTimestamps(getRecordTimestamp(right), getRecordTimestamp(left)),
+      );
   }, [recordsQuery.data, selectedAppId, selectedDayKey]);
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(59,130,246,0.08),_transparent_28%),linear-gradient(180deg,_#f8fbff_0%,_#f4f7fb_100%)] px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
-      <section className="rounded-[32px] bg-white/78 p-6 shadow-[0_20px_60px_rgba(15,23,42,0.06)] backdrop-blur">
-        <div className="flex items-center gap-3">
-          <div className="icon-tile">
-            <ShieldCheck className="h-5 w-5" aria-hidden="true" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-950">回复审核与记录</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              先选游戏，再按日期切换当天评论。左侧看待审核草稿，右侧看当天已经发送的回复记录。
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section className="mt-6 grid gap-5 xl:grid-cols-[228px_176px_minmax(0,1fr)_minmax(0,1fr)]">
-        <aside className="flex min-h-[720px] flex-col rounded-[28px] bg-white/72 p-4 shadow-[0_20px_50px_rgba(15,23,42,0.05)] backdrop-blur">
-          <div className="px-2 pb-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">游戏</p>
-            <p className="mt-2 text-sm text-slate-500">按游戏聚合查看草稿和已发送记录。</p>
-          </div>
+    <main className="min-h-screen px-4 py-5 sm:px-6 lg:py-8 xl:px-8">
+      <section className="grid gap-3 xl:grid-cols-[248px_208px_minmax(0,1fr)_minmax(0,1fr)]">
+        <aside className="app-card flex min-h-[760px] flex-col p-4">
+          <RailHeader
+            icon={<Gamepad2 className="h-4 w-4" aria-hidden="true" />}
+            title="游戏"
+            description="按游戏聚合回复记录"
+          />
           <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
-            {gameSummaries.map((game) => {
-              const active = game.appId === selectedAppId;
-              return (
-                <button
-                  key={game.appId}
-                  type="button"
-                  onClick={() => setSelectedAppId(game.appId)}
-                  className={`w-full rounded-[24px] px-4 py-4 text-left transition duration-200 ${
-                    active
-                      ? "bg-[linear-gradient(180deg,_rgba(239,246,255,0.96),_rgba(230,240,255,0.88))] shadow-[0_16px_36px_rgba(37,99,235,0.12)]"
-                      : "bg-white/78 shadow-[0_10px_28px_rgba(15,23,42,0.05)] hover:bg-white hover:shadow-[0_14px_34px_rgba(15,23,42,0.08)]"
-                  }`}
-                >
-                  <p className="text-sm font-semibold text-slate-900">{game.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">App {game.appId}</p>
-                  <div className="mt-3 space-y-1 text-xs text-slate-500">
-                    <p>待审核 {game.draftCount} 条</p>
-                    <p>已发送 {game.sentCount} 条</p>
-                    <p>{formatDateTime(game.latestAt)}</p>
-                  </div>
-                </button>
-              );
-            })}
+            {gameSummaries.map((game) => (
+              <GameRailCard
+                key={game.appId}
+                game={game}
+                active={game.appId === selectedAppId}
+                onClick={() => setSelectedAppId(game.appId)}
+              />
+            ))}
             {!gamesQuery.isLoading && gameSummaries.length === 0 ? (
-              <EmptyState text="暂无可查看的回复记录。" compact />
+              <EmptyState text="暂无可查看的游戏记录。" compact />
             ) : null}
           </div>
         </aside>
 
-        <aside className="flex min-h-[720px] flex-col rounded-[28px] bg-white/72 p-4 shadow-[0_20px_50px_rgba(15,23,42,0.05)] backdrop-blur">
-          <div className="px-2 pb-2">
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">时间</p>
-          </div>
-          <div className="mt-3 flex-1 space-y-2 overflow-y-auto pr-1">
-            {daySummaries.map((day) => {
-              const active = day.dayKey === selectedDayKey;
-              return (
-                <button
-                  key={day.dayKey}
-                  type="button"
-                  onClick={() => setSelectedDayKey(day.dayKey)}
-                  className={`flex w-full items-center justify-between rounded-[20px] px-4 py-3 text-left transition duration-200 ${
-                    active
-                      ? "bg-[linear-gradient(180deg,_rgba(59,130,246,0.9),_rgba(37,99,235,0.92))] text-white shadow-[0_14px_30px_rgba(37,99,235,0.2)]"
-                      : "bg-white/82 text-slate-900 shadow-[0_10px_24px_rgba(15,23,42,0.05)] hover:bg-white hover:shadow-[0_12px_28px_rgba(15,23,42,0.08)]"
-                  }`}
-                >
-                  <div className="min-w-0">
-                    <p className={`text-base font-semibold ${active ? "text-white" : "text-slate-900"}`}>{day.label}</p>
-                    <p className={`mt-1 text-xs ${active ? "text-white/75" : "text-slate-400"}`}>
-                      待审核 {day.draftCount} · 已发送 {day.sentCount}
-                    </p>
-                  </div>
-                  <span className={`text-2xl font-semibold tabular-nums ${active ? "text-white/80" : "text-slate-400"}`}>
-                    {day.totalCount}
-                  </span>
-                </button>
-              );
-            })}
-            {!auditQueueQuery.isLoading && !recordsQuery.isLoading && daySummaries.length === 0 ? (
-              <EmptyState text="当前游戏暂无可筛选的日期。" compact />
+        <aside className="app-card flex min-h-[760px] flex-col p-4">
+          <RailHeader
+            icon={<CalendarDays className="h-4 w-4" aria-hidden="true" />}
+            title="时间"
+            description="按日期切换审核与发送记录"
+          />
+          <div className="mt-4 flex-1 space-y-2.5 overflow-y-auto pr-1">
+            {daySummaries.map((day) => (
+              <DayRailCard
+                key={day.dayKey}
+                day={day}
+                active={day.dayKey === selectedDayKey}
+                onClick={() => setSelectedDayKey(day.dayKey)}
+              />
+            ))}
+            {!auditQueueQuery.isLoading &&
+            !recordsQuery.isLoading &&
+            daySummaries.length === 0 ? (
+              <EmptyState text="当前游戏暂无日期记录。" compact />
             ) : null}
           </div>
         </aside>
 
-        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+        <section className="app-card flex min-h-[760px] flex-col p-5">
           <ColumnHeader
             eyebrow="待审核草稿"
-            title={selectedGame ? `${selectedGame.name} · ${selectedDay?.label ?? "请选择日期"}` : "待审核草稿"}
-            description="每条评论上方显示评论内容，下方直接编辑回复草稿。"
+            title={selectedGame?.name ?? "请选择游戏"}
+            description=""
             count={selectedDrafts.length}
+            tone="amber"
           />
           <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
             {selectedDrafts.map((item) => (
               <DraftCard key={item.id} item={item} />
             ))}
-            {!auditQueueQuery.isLoading && selectedGame && selectedDay && selectedDrafts.length === 0 ? (
+            {!auditQueueQuery.isLoading &&
+            selectedGame &&
+            selectedDay &&
+            selectedDrafts.length === 0 ? (
               <EmptyState text="这一天没有待审核草稿。" />
             ) : null}
-            {!selectedGame ? (
-              <EmptyState text="先选择一个游戏。" />
-            ) : null}
+            {!selectedGame ? <EmptyState text="先在左侧选择一个游戏。" /> : null}
             {selectedGame && !selectedDay ? (
-              <EmptyState text="先在中间选择一个日期。" />
+              <EmptyState text="再从第二列选择一个日期。" />
             ) : null}
           </div>
         </section>
 
-        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+        <section className="app-card flex min-h-[760px] flex-col p-5">
           <ColumnHeader
             eyebrow="已发送评论"
-            title={selectedGame ? `${selectedGame.name} · ${selectedDay?.label ?? "请选择日期"}` : "已发送评论"}
-            description="显示所选游戏在该日期已经发送到 Steam 的评论回复。"
+            title={selectedGame?.name ?? "请选择游戏"}
+            description={
+              selectedDay
+                ? `当前查看 ${selectedDay.label} 已发往 Steam 的回复`
+                : "先选择左侧日期，再查看已发送记录"
+            }
             count={selectedSentRecords.length}
+            tone="emerald"
           />
           <div className="mt-5 flex-1 space-y-4 overflow-y-auto pr-1">
             {selectedSentRecords.map((item) => (
               <SentRecordCard key={item.id} item={item} />
             ))}
-            {!recordsQuery.isLoading && selectedGame && selectedDay && selectedSentRecords.length === 0 ? (
+            {!recordsQuery.isLoading &&
+            selectedGame &&
+            selectedDay &&
+            selectedSentRecords.length === 0 ? (
               <EmptyState text="这一天还没有已发送评论。" />
             ) : null}
-            {!selectedGame ? (
-              <EmptyState text="先选择一个游戏。" />
-            ) : null}
+            {!selectedGame ? <EmptyState text="先在左侧选择一个游戏。" /> : null}
             {selectedGame && !selectedDay ? (
-              <EmptyState text="先在中间选择一个日期。" />
+              <EmptyState text="再从第二列选择一个日期。" />
             ) : null}
           </div>
         </section>
@@ -315,112 +309,107 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
   });
 
   return (
-    <article className="rounded-[28px] bg-[linear-gradient(180deg,_rgba(248,250,252,0.96),_rgba(241,245,249,0.92))] p-4 shadow-[0_16px_38px_rgba(15,23,42,0.06)]">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-blue-100 text-sm font-semibold text-blue-700">
-              {(item.persona_name || "匿").slice(0, 1).toUpperCase()}
-            </div>
-            <div className="min-w-0">
-              <p className="truncate text-base font-semibold text-slate-950">{item.persona_name || "匿名玩家"}</p>
-              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
-                  <MessageSquareMore className="h-3.5 w-3.5" />
-                  帖子 #{item.review_id}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
-                  <Clock3 className="h-3.5 w-3.5" />
-                  {formatDateTime(item.timestamp_created ?? item.created_at)}
-                </span>
-                <span className="badge-orange px-3">{getDraftStatusLabel(item.status)}</span>
-              </div>
-            </div>
+    <article className="soft-panel overflow-hidden border border-amber-100 bg-[linear-gradient(180deg,_rgba(255,251,235,0.9),_rgba(255,255,255,0.96))] p-3.5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone="amber">{getDraftStatusLabel(item.status)}</StatusBadge>
+            <ReviewMoodBadge votedUp={item.voted_up} />
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 px-4 text-sm"
-            disabled={saveMutation.isPending || draftText.trim().length === 0}
-            onClick={() => saveMutation.mutate()}
-          >
-            保存
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            className="h-10 px-4 text-sm"
-            disabled={regenerateMutation.isPending}
-            onClick={() => regenerateMutation.mutate()}
-          >
-            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            {regenerateMutation.isPending ? "生成中" : "重生成"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-10 px-4 text-sm"
-            disabled={rejectMutation.isPending}
-            onClick={() => {
-              if (window.confirm("确认驳回这条草稿吗？驳回后会从待审核列表移除。")) {
-                rejectMutation.mutate();
-              }
-            }}
-          >
-            {rejectMutation.isPending ? "驳回中" : "驳回"}
-          </Button>
-          <Button
-            type="button"
-            className="h-10 px-4 text-sm"
-            disabled={sendMutation.isPending || draftText.trim().length === 0}
-            onClick={() => {
-              if (window.confirm("确认通过并发送这条回复到 Steam 吗？")) {
-                sendMutation.mutate();
-              }
-            }}
-          >
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            {sendMutation.isPending ? "发送中" : "通过发送"}
-          </Button>
+          <p className="mt-2.5 text-[15px] font-semibold text-slate-950">
+            {item.persona_name || "匿名玩家"}
+            <span className="px-2 text-slate-300">|</span>
+            <span className="text-[13px] font-medium text-slate-500">
+              {formatDateTime(item.timestamp_created ?? item.created_at)}
+            </span>
+          </p>
         </div>
       </div>
 
       {item.error_message ? (
-        <div className="mt-4 rounded-[18px] bg-rose-50/92 px-4 py-3 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="mt-3 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
           生成失败：{item.error_message}
         </div>
       ) : null}
 
       {sendMutation.isError ? (
-        <div className="mt-4 rounded-[18px] bg-rose-50/92 px-4 py-3 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+        <div className="mt-3 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
           {(sendMutation.error as Error).message}
         </div>
       ) : null}
 
-      <section className="mt-4 rounded-[22px] bg-white/94 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
-          <span className="text-[11px] text-slate-400">{(item.review_text || "").length} 字</span>
-        </div>
-        <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-          {item.review_text || "暂无评论内容"}
-        </p>
-      </section>
-
-      <section className="mt-3 rounded-[22px] bg-white/94 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">回复草稿</p>
-          <span className="text-[11px] text-slate-400">{draftText.trim().length} 字</span>
-        </div>
-        <textarea
-          className="mt-3 min-h-[172px] w-full resize-y rounded-[18px] border border-slate-200 bg-slate-50/70 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100"
-          value={draftText}
-          onChange={(event) => setDraftText(event.target.value)}
+      <div className="mt-3 grid gap-2.5">
+        <ContentPanel
+          label="评论内容"
+          count={(item.review_text || "").length}
+          content={item.review_text || "暂无评论内容"}
+          compact
         />
-      </section>
+
+        <section className="rounded-[20px] border border-slate-200 bg-white p-3.5 shadow-sm shadow-slate-100/80">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              回复草稿
+            </p>
+            <span className="text-[11px] text-slate-400">
+              {draftText.trim().length} 字
+            </span>
+          </div>
+          <textarea
+            className="mt-2.5 min-h-[128px] w-full resize-y rounded-2xl border border-slate-200 bg-slate-50/70 px-3 py-2.5 text-sm leading-6 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            value={draftText}
+            onChange={(event) => setDraftText(event.target.value)}
+          />
+        </section>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 px-3 text-xs"
+          disabled={saveMutation.isPending || draftText.trim().length === 0}
+          onClick={() => saveMutation.mutate()}
+        >
+          {saveMutation.isPending ? "保存中" : "保存"}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-8 px-3 text-xs"
+          disabled={regenerateMutation.isPending}
+          onClick={() => regenerateMutation.mutate()}
+        >
+          <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+          {regenerateMutation.isPending ? "生成中" : "重生成"}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 px-3 text-xs"
+          disabled={rejectMutation.isPending}
+          onClick={() => {
+            if (window.confirm("确认驳回这条草稿吗？驳回后会从待审核列表移除。")) {
+              rejectMutation.mutate();
+            }
+          }}
+        >
+          {rejectMutation.isPending ? "驳回中" : "驳回"}
+        </Button>
+        <Button
+          type="button"
+          className="h-8 flex-1 px-3 text-xs"
+          disabled={sendMutation.isPending || draftText.trim().length === 0}
+          onClick={() => {
+            if (window.confirm("确认通过并发送这条回复到 Steam 吗？")) {
+              sendMutation.mutate();
+            }
+          }}
+        >
+          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+          {sendMutation.isPending ? "发送中" : "通过发送"}
+        </Button>
+      </div>
     </article>
   );
 }
@@ -439,20 +428,23 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
   });
 
   return (
-    <article className="rounded-[26px] bg-[linear-gradient(180deg,_rgba(240,253,244,0.92),_rgba(248,250,252,0.9))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+    <article className="soft-panel overflow-hidden border border-emerald-100 bg-[linear-gradient(180deg,_rgba(236,253,245,0.9),_rgba(255,255,255,0.96))] p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-slate-900">{item.persona_name || "匿名玩家"}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge tone="emerald">已发送</StatusBadge>
+            <ReviewMoodBadge votedUp={item.voted_up} />
+          </div>
+          <p className="mt-3 text-base font-semibold text-slate-950">
+            {item.persona_name || "匿名玩家"}
+          </p>
           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
-              <MessageSquareMore className="h-3.5 w-3.5" />
+            <MetaChip icon={<MessageSquareMore className="h-3.5 w-3.5" />}>
               帖子 #{item.review_id}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
-              <Clock3 className="h-3.5 w-3.5" />
+            </MetaChip>
+            <MetaChip icon={<Clock3 className="h-3.5 w-3.5" />}>
               {formatDateTime(item.sent_at ?? item.created_at)}
-            </span>
-            <span className="badge-green px-3">已发送</span>
+            </MetaChip>
           </div>
         </div>
         <Button
@@ -471,28 +463,146 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
         </Button>
       </div>
 
-      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
-        <section className="rounded-[22px] bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
-            <span className="text-[11px] text-slate-400">{(item.review_text || "").length} 字</span>
-          </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
-            {item.review_text || "暂无评论内容"}
-          </p>
-        </section>
-
-        <section className="rounded-[22px] bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">已发送回复</p>
-            <span className="text-[11px] text-slate-400">{(item.content || "").length} 字</span>
-          </div>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-800">
-            {item.content || "暂无回复内容"}
-          </p>
-        </section>
+      <div className="mt-4 grid gap-3 xl:grid-cols-2">
+        <ContentPanel
+          label="评论内容"
+          count={(item.review_text || "").length}
+          content={item.review_text || "暂无评论内容"}
+        />
+        <ContentPanel
+          label="已发送回复"
+          count={(item.content || "").length}
+          content={item.content || "暂无回复内容"}
+        />
       </div>
     </article>
+  );
+}
+
+function RailHeader({
+  icon,
+  title,
+  description,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="border-b border-slate-100 pb-4">
+      <div className="flex items-center gap-3">
+        <div className="icon-tile h-10 w-10 rounded-2xl">{icon}</div>
+        <div>
+          <h2 className="text-base font-semibold text-slate-950">{title}</h2>
+          <p className="mt-1 text-sm text-slate-500">{description}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function GameRailCard({
+  game,
+  active,
+  onClick,
+}: {
+  game: GameSummary;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-[24px] border px-4 py-4 text-left transition ${
+        active
+          ? "border-blue-200 bg-blue-50 shadow-sm shadow-blue-100/80"
+          : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
+      }`}
+    >
+      <p className="text-sm font-semibold text-slate-950">{game.name}</p>
+      <p className="mt-1 text-xs text-slate-500">App {game.appId}</p>
+      <div className="mt-4 grid grid-cols-2 gap-2">
+        <MiniCount label="待审核" value={game.draftCount} tone="amber" />
+        <MiniCount label="已发送" value={game.sentCount} tone="emerald" />
+      </div>
+      <p className="mt-3 text-xs text-slate-400">{formatDateTime(game.latestAt)}</p>
+    </button>
+  );
+}
+
+function DayRailCard({
+  day,
+  active,
+  onClick,
+}: {
+  day: DaySummary;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full rounded-[22px] border px-4 py-3 text-left transition ${
+        active
+          ? "border-blue-200 bg-blue-600 text-white shadow-sm shadow-blue-200/80"
+          : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">{day.label}</p>
+          <p className={`mt-1 text-xs ${active ? "text-white/75" : "text-slate-400"}`}>
+            {formatDateTime(day.latestAt)}
+          </p>
+        </div>
+        <span
+          className={`text-lg font-semibold tabular-nums ${
+            active ? "text-white" : "text-slate-400"
+          }`}
+        >
+          {day.totalCount}
+        </span>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2 text-xs">
+        <span
+          className={`rounded-full px-2.5 py-1 ${
+            active ? "bg-white/15 text-white" : "bg-amber-50 text-amber-700"
+          }`}
+        >
+          待审核 {day.draftCount}
+        </span>
+        <span
+          className={`rounded-full px-2.5 py-1 ${
+            active ? "bg-white/15 text-white" : "bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          已发送 {day.sentCount}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function MiniCount({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "amber" | "emerald";
+}) {
+  const classes =
+    tone === "amber"
+      ? "bg-amber-50 text-amber-700"
+      : "bg-emerald-50 text-emerald-700";
+  return (
+    <div className={`rounded-2xl px-3 py-2 text-xs ${classes}`}>
+      <p>{label}</p>
+      <p className="mt-1 text-sm font-semibold">{value}</p>
+    </div>
   );
 }
 
@@ -501,30 +611,120 @@ function ColumnHeader({
   title,
   description,
   count,
+  tone,
 }: {
   eyebrow: string;
   title: string;
   description: string;
   count: number;
+  tone: "amber" | "emerald";
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-4 pb-4">
+    <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 pb-4">
       <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{eyebrow}</p>
-        <h2 className="mt-2 text-lg font-semibold text-slate-950">{title}</h2>
+        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">
+          {eyebrow}
+        </p>
+        <h2 className="mt-2 text-xl font-semibold text-slate-950">{title}</h2>
         <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
-        {count} 条
-      </span>
+      <StatusBadge tone={tone}>{count} 条</StatusBadge>
     </div>
   );
 }
 
-function EmptyState({ text, compact = false }: { text: string; compact?: boolean }) {
+function ContentPanel({
+  label,
+  count,
+  content,
+  compact = false,
+}: {
+  label: string;
+  count: number;
+  content: string;
+  compact?: boolean;
+}) {
+  return (
+    <section
+      className={`rounded-[22px] border border-slate-200 bg-white shadow-sm shadow-slate-100/80 ${
+        compact ? "p-3.5" : "p-4"
+      }`}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+          {label}
+        </p>
+        <span className="text-[11px] text-slate-400">{count} 字</span>
+      </div>
+      <p
+        className={`whitespace-pre-wrap text-sm text-slate-700 ${
+          compact ? "mt-2.5 leading-6" : "mt-3 leading-7"
+        }`}
+      >
+        {content}
+      </p>
+    </section>
+  );
+}
+
+function MetaChip({
+  icon,
+  children,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1">
+      {icon}
+      {children}
+    </span>
+  );
+}
+
+function ReviewMoodBadge({ votedUp }: { votedUp: boolean | null | undefined }) {
+  if (votedUp === true) {
+    return <StatusBadge tone="emerald">好评</StatusBadge>;
+  }
+  if (votedUp === false) {
+    return <StatusBadge tone="rose">差评</StatusBadge>;
+  }
+  return <StatusBadge tone="slate">未标记</StatusBadge>;
+}
+
+function StatusBadge({
+  tone,
+  children,
+}: {
+  tone: "amber" | "emerald" | "rose" | "slate";
+  children: ReactNode;
+}) {
+  const classes: Record<typeof tone, string> = {
+    amber: "border-amber-100 bg-amber-50 text-amber-700",
+    emerald: "border-emerald-100 bg-emerald-50 text-emerald-700",
+    rose: "border-rose-100 bg-rose-50 text-rose-700",
+    slate: "border-slate-200 bg-slate-100 text-slate-600",
+  };
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold ${classes[tone]}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+function EmptyState({
+  text,
+  compact = false,
+}: {
+  text: string;
+  compact?: boolean;
+}) {
   return (
     <div
-      className={`rounded-[24px] bg-white/82 text-center text-sm text-slate-500 shadow-[0_12px_30px_rgba(15,23,42,0.05)] ${
+      className={`rounded-[24px] border border-dashed border-slate-200 bg-slate-50/70 text-center text-sm text-slate-500 ${
         compact ? "p-5" : "p-8"
       }`}
     >
@@ -538,33 +738,33 @@ function buildGameSummaries(
   records: ReplyRecord[],
   games: GameListItem[],
 ): GameSummary[] {
-  const nameMap = new Map(games.map((game) => [game.app_id, game.name?.trim() || `App ${game.app_id}`]));
+  const nameMap = new Map(
+    games.map((game) => [game.app_id, game.name?.trim() || `App ${game.app_id}`]),
+  );
   const summaries = new Map<number, GameSummary>();
 
   for (const draft of drafts) {
-    upsertGameSummary(
-      summaries,
-      draft.app_id,
-      draft.game_name,
-      nameMap,
-      { draftCount: 1, sentCount: 0, timestamp: getDraftTimestamp(draft) },
-    );
+    upsertGameSummary(summaries, draft.app_id, draft.game_name, nameMap, {
+      draftCount: 1,
+      sentCount: 0,
+      timestamp: getDraftTimestamp(draft),
+    });
   }
 
   for (const record of records) {
     if (!record.app_id) {
       continue;
     }
-    upsertGameSummary(
-      summaries,
-      record.app_id,
-      record.game_name ?? null,
-      nameMap,
-      { draftCount: 0, sentCount: 1, timestamp: getRecordTimestamp(record) },
-    );
+    upsertGameSummary(summaries, record.app_id, record.game_name ?? null, nameMap, {
+      draftCount: 0,
+      sentCount: 1,
+      timestamp: getRecordTimestamp(record),
+    });
   }
 
-  return [...summaries.values()].sort((left, right) => compareTimestamps(right.latestAt, left.latestAt));
+  return [...summaries.values()].sort((left, right) =>
+    compareTimestamps(right.latestAt, left.latestAt),
+  );
 }
 
 function buildDaySummaries(
@@ -602,7 +802,9 @@ function buildDaySummaries(
     });
   }
 
-  return [...summaries.values()].sort((left, right) => compareTimestamps(right.latestAt, left.latestAt));
+  return [...summaries.values()].sort((left, right) =>
+    compareTimestamps(right.latestAt, left.latestAt),
+  );
 }
 
 function upsertGameSummary(
@@ -631,7 +833,10 @@ function upsertGameSummary(
     draftCount: existing.draftCount + delta.draftCount,
     sentCount: existing.sentCount + delta.sentCount,
     totalCount: existing.totalCount + delta.draftCount + delta.sentCount,
-    latestAt: compareTimestamps(existing.latestAt, delta.timestamp) >= 0 ? existing.latestAt : delta.timestamp,
+    latestAt:
+      compareTimestamps(existing.latestAt, delta.timestamp) >= 0
+        ? existing.latestAt
+        : delta.timestamp,
   });
 }
 
@@ -658,7 +863,10 @@ function upsertDaySummary(
     draftCount: existing.draftCount + delta.draftCount,
     sentCount: existing.sentCount + delta.sentCount,
     totalCount: existing.totalCount + delta.draftCount + delta.sentCount,
-    latestAt: compareTimestamps(existing.latestAt, delta.timestamp) >= 0 ? existing.latestAt : delta.timestamp,
+    latestAt:
+      compareTimestamps(existing.latestAt, delta.timestamp) >= 0
+        ? existing.latestAt
+        : delta.timestamp,
   });
 }
 
@@ -692,7 +900,10 @@ function toDayKey(value: string | null | undefined) {
   return `${year}-${month}-${day}`;
 }
 
-function compareTimestamps(left: string | null | undefined, right: string | null | undefined) {
+function compareTimestamps(
+  left: string | null | undefined,
+  right: string | null | undefined,
+) {
   const leftTime = left ? new Date(left).getTime() : 0;
   const rightTime = right ? new Date(right).getTime() : 0;
   return leftTime - rightTime;

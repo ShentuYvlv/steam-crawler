@@ -154,6 +154,7 @@ def build_proxy_log_fields(
         "proxy_port_type": port_type,
         "proxy_port": port_value,
         "proxy_scheme": scheme_value,
+        "proxy_host": proxy_settings.host if proxy_settings.is_active_for_mode(proxy_mode) else None,
         "proxy_fallback_enabled": proxy_settings.direct_fallback,
         "proxy_fallback_used": fallback_used,
         "proxy_error": error_message,

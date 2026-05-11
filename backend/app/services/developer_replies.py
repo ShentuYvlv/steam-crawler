@@ -14,7 +14,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
-from app.core.config import get_settings
+from app.core.config import REPO_ROOT, get_settings
 from app.core.error_utils import format_exception_message
 from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamReview
 
@@ -293,12 +293,43 @@ def create_steam_reply_client() -> SteamDeveloperReplyClient:
     from src.scrapers.comment_reply import DeveloperReplyClient, load_cookie_header
 
     settings = get_settings()
-    cookie_file = Path(settings.steam_cookie_file)
+    cookie_file = resolve_cookie_file_path(settings.steam_cookie_file)
     if not cookie_file.exists():
-        raise DeveloperReplyError(f"Cookie file does not exist: {cookie_file}")
+        raise DeveloperReplyError(
+            "Cookie file does not exist: "
+            f"{settings.steam_cookie_file}. "
+            f"Resolved path: {cookie_file}"
+        )
 
     cookie_header = load_cookie_header(cookie_file)
-    return DeveloperReplyClient(cookie_header=cookie_header)
+    return DeveloperReplyClient(
+        cookie_header=cookie_header,
+        proxy_url=settings.steam_reply_proxy_url or None,
+        proxy_direct_fallback=settings.steam_reply_proxy_direct_fallback,
+    )
+
+
+def resolve_cookie_file_path(path_value: str) -> Path:
+    raw_value = path_value.strip()
+    configured = Path(raw_value).expanduser()
+    candidates: list[Path] = [configured]
+
+    if not configured.is_absolute():
+        candidates.append((REPO_ROOT / configured).resolve())
+
+    if raw_value.startswith("/app/"):
+        docker_mapped = (REPO_ROOT / raw_value.removeprefix("/app/")).resolve()
+        candidates.append(docker_mapped)
+
+    seen: set[Path] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        if candidate.exists():
+            return candidate
+
+    return candidates[-1] if candidates else configured
 
 
 async def process_pending_reply_send(record_id: int) -> None:

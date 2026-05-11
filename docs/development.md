@@ -24,6 +24,8 @@
    - `JWT_SECRET_KEY`：本地随机长字符串。
    - `ALIYUN_API_KEY`：阿里云模型 API Key，接入 AI 草稿阶段才必需。
    - `STEAM_COOKIE_FILE`：开发者回复阶段需要，默认读取 `data/steam_cookie.txt`。
+   - `STEAM_REPLY_PROXY_URL`：开发者回复请求的代理地址，本地可填 `http://127.0.0.1:7890`，服务器可填可达的出口代理。
+   - `STEAM_REPLY_PROXY_DIRECT_FALLBACK`：开发者回复代理失败后是否回退直连，默认关闭更稳。
 
 3. 确保宿主机 PostgreSQL 和 Redis 已启动，且 `.env` 中的 `DATABASE_URL`、`REDIS_URL` 可连接。
 
@@ -204,6 +206,7 @@ curl http://localhost:8000/api/reply-drafts/1
 ## 审核、发送与回复记录
 
 评论详情展开后会显示 AI 回复审核区。发送前必须人工点击确认，后端才会读取 `STEAM_COOKIE_FILE` 并调用 Steam Community 的 `setdeveloperresponse/{recommendationid}`。
+如果配置了 `STEAM_REPLY_PROXY_URL`，回复发送会优先走该代理；这和抓取用的 Oxylabs 代理是独立的。
 
 核心接口：
 

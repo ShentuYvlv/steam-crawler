@@ -346,6 +346,7 @@ function ProxyModeCard({
 }) {
   const location = (mode.location ?? {}) as Record<string, unknown>;
   const ip = typeof location.ip === "string" ? location.ip : "—";
+  const proxyHost = mode.proxy_host ?? host;
   const providers =
     location.providers && typeof location.providers === "object"
       ? (location.providers as Record<string, unknown>)
@@ -367,7 +368,7 @@ function ProxyModeCard({
       </div>
       <div className="mt-3 space-y-2 text-sm text-slate-600">
         <p>模式：{mode.proxy_mode}</p>
-        <p>入口：{mode.proxy_scheme ?? scheme}://{host}:{mode.proxy_port ?? "—"}</p>
+        <p>入口：{mode.proxy_scheme ?? scheme}://{proxyHost}:{mode.proxy_port ?? "—"}</p>
         <p>IP：{ip}</p>
         <p>地区：{country} / {city}</p>
         <p>说明：{mode.exact_ip ? "精确会话 IP" : "示例诊断 IP"}</p>

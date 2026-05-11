@@ -12,7 +12,9 @@ from app.models import Base, DeveloperReply, ReplyDraft, SteamGame, SteamReview,
 from app.services.developer_replies import (
     DeveloperReplyError,
     DeveloperReplyService,
+    create_steam_reply_client,
     process_pending_reply_send,
+    resolve_cookie_file_path,
 )
 
 
@@ -43,6 +45,61 @@ class FailingSteamReplyClient:
 
     async def close(self) -> None:
         return None
+
+
+def test_resolve_cookie_file_path_maps_docker_app_path_to_local_repo(tmp_path, monkeypatch) -> None:
+    import app.services.developer_replies as developer_replies_module
+
+    cookie_file = tmp_path / "data" / "steam_cookie.txt"
+    cookie_file.parent.mkdir(parents=True, exist_ok=True)
+    cookie_file.write_text("sessionid=test-cookie", encoding="utf-8")
+    monkeypatch.setattr(developer_replies_module, "REPO_ROOT", tmp_path)
+
+    resolved = resolve_cookie_file_path("/app/data/steam_cookie.txt")
+
+    assert resolved == cookie_file
+
+
+def test_create_steam_reply_client_reads_local_cookie_for_docker_style_env(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    import app.services.developer_replies as developer_replies_module
+
+    cookie_file = tmp_path / "data" / "steam_cookie.txt"
+    cookie_file.parent.mkdir(parents=True, exist_ok=True)
+    cookie_file.write_text("sessionid=test-cookie", encoding="utf-8")
+
+    class FakeSettings:
+        steam_cookie_file = "/app/data/steam_cookie.txt"
+        steam_reply_proxy_url = "http://127.0.0.1:7890"
+        steam_reply_proxy_direct_fallback = False
+
+    class FakeClient:
+        def __init__(
+            self,
+            cookie_header: str,
+            proxy_url: str | None = None,
+            proxy_direct_fallback: bool = False,
+        ) -> None:
+            self.cookie_header = cookie_header
+            self.proxy_url = proxy_url
+            self.proxy_direct_fallback = proxy_direct_fallback
+
+    monkeypatch.setattr(developer_replies_module, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(developer_replies_module, "get_settings", lambda: FakeSettings())
+    monkeypatch.setattr(
+        "src.scrapers.comment_reply.load_cookie_header",
+        lambda path: f"loaded:{path}",
+    )
+    monkeypatch.setattr("src.scrapers.comment_reply.DeveloperReplyClient", FakeClient)
+
+    client = create_steam_reply_client()
+
+    assert isinstance(client, FakeClient)
+    assert client.cookie_header == f"loaded:{cookie_file}"
+    assert client.proxy_url == "http://127.0.0.1:7890"
+    assert client.proxy_direct_fallback is False
 
 
 async def test_developer_reply_send_updates_record_review_and_draft() -> None:

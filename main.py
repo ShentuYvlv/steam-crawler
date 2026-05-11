@@ -1023,6 +1023,8 @@ async def run_reply_comments_async(
                 cookie_header=cookie_header,
                 session_id=args.sessionid,
                 config=config,
+                proxy_url=config.developer_replies.proxy_url or None,
+                proxy_direct_fallback=config.developer_replies.proxy_direct_fallback,
             )
         except ValueError as e:
             ui.print_error(str(e))

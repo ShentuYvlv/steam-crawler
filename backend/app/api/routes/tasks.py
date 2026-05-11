@@ -6,9 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.utils.oxylabs_diagnostics import fetch_proxy_location
 from src.utils.oxylabs_proxy import load_oxylabs_proxy_settings
+from src.utils.steam_reply_proxy import probe_proxy_location
 from src.utils.task_control import SteamTemporarilyUnavailableError, TaskCancelledError
 
 from app.core.database import AsyncSessionLocal, get_session
+from app.core.config import get_settings
 from app.core.error_utils import format_exception_details, format_exception_message
 from app.core.security import RequireOperator
 from app.models import SteamGame, SyncJob, TaskLog, TaskSchedule
@@ -98,9 +100,16 @@ async def list_tasks(
 @router.get("/proxy-status", response_model=ProxyStatusResponse)
 async def get_proxy_status() -> ProxyStatusResponse:
     settings = load_oxylabs_proxy_settings()
+    app_settings = get_settings()
     sticky_port = settings.choose_sticky_session_port() if settings.enabled else None
     scraping = await fetch_proxy_location("rotate_per_request")
-    sending = await fetch_proxy_location("sticky_session", session_port=sticky_port)
+    if app_settings.steam_reply_proxy_url:
+        sending = await probe_proxy_location(
+            app_settings.steam_reply_proxy_url,
+            fallback_enabled=app_settings.steam_reply_proxy_direct_fallback,
+        )
+    else:
+        sending = await fetch_proxy_location("sticky_session", session_port=sticky_port)
     return ProxyStatusResponse(
         enabled=settings.enabled,
         host=settings.host,

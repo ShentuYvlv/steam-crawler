@@ -14,6 +14,8 @@ services:
       ALIYUN_API_KEY: ${ALIYUN_API_KEY:-}
       ALIYUN_MODEL: ${ALIYUN_MODEL:-qwen-plus}
       ALIYUN_BASE_URL: ${ALIYUN_BASE_URL:-https://dashscope.aliyuncs.com/api/v1/services/aigc/text-generation/generation}
+      STEAM_REPLY_PROXY_URL: ${STEAM_REPLY_PROXY_URL:-}
+      STEAM_REPLY_PROXY_DIRECT_FALLBACK: ${STEAM_REPLY_PROXY_DIRECT_FALLBACK:-false}
       OXYLABS_PROXY_ENABLED: ${OXYLABS_PROXY_ENABLED:-false}
       OXYLABS_PROXY_HOST: ${OXYLABS_PROXY_HOST:-dc.oxylabs.io}
       OXYLABS_PROXY_PORT: ${OXYLABS_PROXY_PORT:-8000}

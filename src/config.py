@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -16,6 +17,13 @@ from src.utils.env_loader import load_env_defaults
 
 
 load_env_defaults()
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
 @dataclass
@@ -99,6 +107,12 @@ class DeveloperRepliesConfig:
     response_file: str = "./data/developer_response.txt"
     result_file: str = "./data/developer_reply_results.json"
     limit: int = 0
+    proxy_url: str = field(
+        default_factory=lambda: os.environ.get("STEAM_REPLY_PROXY_URL", "").strip()
+    )
+    proxy_direct_fallback: bool = field(
+        default_factory=lambda: _env_bool("STEAM_REPLY_PROXY_DIRECT_FALLBACK", default=False)
+    )
 
 
 @dataclass

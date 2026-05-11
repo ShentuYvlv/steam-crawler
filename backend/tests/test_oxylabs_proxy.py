@@ -287,6 +287,48 @@ async def test_developer_reply_client_falls_back_to_http_sticky_proxy_scheme(
     assert metadata["proxy_scheme"] == "http"
 
 
+async def test_developer_reply_client_prefers_explicit_proxy_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created_proxies: list[str | None] = []
+
+    class FakeAsyncClient:
+        def __init__(self, *, proxy=None, **kwargs):
+            self.proxy = proxy
+            created_proxies.append(proxy)
+
+        async def post(self, url, data=None):
+            return _response("POST", url, {"success": 1})
+
+        async def get(self, url, params=None):
+            return _response("GET", url, {"ip": "127.0.0.1"})
+
+        async def aclose(self):
+            return None
+
+    monkeypatch.setattr("src.scrapers.comment_reply.httpx.AsyncClient", FakeAsyncClient)
+
+    client = DeveloperReplyClient(
+        "sessionid=abc",
+        proxy_url="http://127.0.0.1:7890",
+        proxy_direct_fallback=False,
+    )
+    try:
+        result = await client.set_developer_response("1001", "hello")
+        metadata = client.get_last_request_metadata()
+        diagnostics = await client.get_transport_diagnostics()
+    finally:
+        await client.close()
+
+    assert result["success"] is True
+    assert created_proxies == ["http://127.0.0.1:7890"]
+    assert metadata["proxy_mode"] == "explicit_proxy"
+    assert metadata["proxy_port_type"] == "explicit"
+    assert metadata["proxy_scheme"] == "http"
+    assert metadata["proxy_host"] == "127.0.0.1"
+    assert diagnostics["proxy_mode"] == "explicit_proxy"
+
+
 async def test_probe_uses_same_rotating_proxy_strategy_as_scraping(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

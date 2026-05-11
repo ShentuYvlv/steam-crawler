@@ -74,6 +74,7 @@ class ProxyModeStatusResponse(BaseModel):
     proxy_port_type: str
     proxy_port: int | None = None
     proxy_scheme: str | None = None
+    proxy_host: str | None = None
     proxy_fallback_enabled: bool
     proxy_fallback_used: bool = False
     proxy_error: str | None = None

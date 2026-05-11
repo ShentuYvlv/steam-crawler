@@ -44,6 +44,14 @@ class Settings(BaseSettings):
         default="./data/steam_cookie.txt",
         validation_alias="STEAM_COOKIE_FILE",
     )
+    steam_reply_proxy_url: str | None = Field(
+        default=None,
+        validation_alias="STEAM_REPLY_PROXY_URL",
+    )
+    steam_reply_proxy_direct_fallback: bool = Field(
+        default=False,
+        validation_alias="STEAM_REPLY_PROXY_DIRECT_FALLBACK",
+    )
     oxylabs_proxy_enabled: bool = Field(
         default=False,
         validation_alias="OXYLABS_PROXY_ENABLED",

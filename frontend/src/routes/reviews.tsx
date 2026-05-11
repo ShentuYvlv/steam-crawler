@@ -123,7 +123,7 @@ function ReviewsPage() {
     }
   });
   const bulkGenerateDraftMutation = useMutation({
-    mutationFn: () => bulkGenerateReplyDrafts(selectedIds),
+    mutationFn: (reviewIds: number[]) => bulkGenerateReplyDrafts(reviewIds),
     onSuccess: (response) => {
       setDraftNotice(`已提交 ${response.accepted_count} 条评论进入草稿生成队列`);
       setSelectedIds([]);
@@ -359,7 +359,7 @@ function ReviewsPage() {
             variant="secondary"
             className="flex-1 sm:flex-none"
             disabled={selectedIds.length === 0 || bulkGenerateDraftMutation.isPending}
-            onClick={() => bulkGenerateDraftMutation.mutate()}
+            onClick={() => bulkGenerateDraftMutation.mutate([...selectedIds])}
           >
             <Sparkles className="h-4 w-4" aria-hidden="true" />
             批量生成草稿

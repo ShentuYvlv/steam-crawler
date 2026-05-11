@@ -185,16 +185,17 @@ async def bulk_generate_reply(
     background_tasks: BackgroundTasks,
     session: SessionDependency,
 ) -> BulkGenerateReplyResponse:
+    review_ids = list(request.review_ids)
     task = await _create_background_task(
         session,
         job_type="bulk_reply_generation",
         source_type="aliyun_api",
-        review_ids=request.review_ids,
+        review_ids=review_ids,
     )
-    background_tasks.add_task(_generate_reply_drafts_in_background, task.id, request.review_ids)
+    background_tasks.add_task(_generate_reply_drafts_in_background, task.id, review_ids)
     return BulkGenerateReplyResponse(
-        accepted_count=len(request.review_ids),
-        review_ids=request.review_ids,
+        accepted_count=len(review_ids),
+        review_ids=review_ids,
         task_id=task.id,
     )
 

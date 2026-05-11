@@ -92,7 +92,7 @@ function TaskQueuePage() {
           <div>
             <h1 className="text-2xl font-semibold text-slate-950">任务队列</h1>
             <p className="mt-1 text-sm text-slate-500">
-              默认只显示正在运行和排队中的任务。排序规则固定为：执行中、等待探针、排队中、取消中；已结束任务单独归档查看。
+              默认只显示正在运行和排队中的任务。任务列表统一按时间倒序显示，最新开始或结束的任务排在最前。
             </p>
           </div>
         </div>

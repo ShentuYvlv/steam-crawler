@@ -204,7 +204,7 @@ function ReplyRecordsPage() {
           </div>
         </aside>
 
-        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
           <ColumnHeader
             eyebrow="待审核草稿"
             title={selectedGame ? `${selectedGame.name} · ${selectedDay?.label ?? "请选择日期"}` : "待审核草稿"}
@@ -227,7 +227,7 @@ function ReplyRecordsPage() {
           </div>
         </section>
 
-        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
+        <section className="flex min-h-[720px] flex-col rounded-[32px] bg-white/82 p-5 shadow-[0_24px_60px_rgba(15,23,42,0.06)] backdrop-blur">
           <ColumnHeader
             eyebrow="已发送评论"
             title={selectedGame ? `${selectedGame.name} · ${selectedDay?.label ?? "请选择日期"}` : "已发送评论"}
@@ -313,92 +313,103 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
   });
 
   return (
-    <article className="rounded-[28px] bg-[linear-gradient(180deg,_rgba(248,250,252,0.95),_rgba(241,245,249,0.88))] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">{item.persona_name || "匿名玩家"}</p>
-          <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
-              <MessageSquareMore className="h-3.5 w-3.5" />
-              帖子 #{item.review_id}
-            </span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
-              <Clock3 className="h-3.5 w-3.5" />
-              {formatDateTime(item.timestamp_created ?? item.created_at)}
-            </span>
-            <span className="badge-orange px-3">
-              {getDraftStatusLabel(item.status)}
-            </span>
+    <article className="rounded-[26px] bg-[linear-gradient(180deg,_rgba(248,250,252,0.95),_rgba(241,245,249,0.88))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">{item.persona_name || "匿名玩家"}</p>
+            <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
+                <MessageSquareMore className="h-3.5 w-3.5" />
+                帖子 #{item.review_id}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/90 px-3 py-1">
+                <Clock3 className="h-3.5 w-3.5" />
+                {formatDateTime(item.timestamp_created ?? item.created_at)}
+              </span>
+              <span className="badge-orange px-3">{getDraftStatusLabel(item.status)}</span>
+            </div>
+          </div>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-4 text-sm"
+              disabled={saveMutation.isPending || draftText.trim().length === 0}
+              onClick={() => saveMutation.mutate()}
+            >
+              保存
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="h-10 px-4 text-sm"
+              disabled={regenerateMutation.isPending}
+              onClick={() => regenerateMutation.mutate()}
+            >
+              <RefreshCcw className="h-4 w-4" aria-hidden="true" />
+              {regenerateMutation.isPending ? "生成中" : "重生成"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10 px-4 text-sm"
+              disabled={rejectMutation.isPending}
+              onClick={() => {
+                if (window.confirm("确认驳回这条草稿吗？驳回后会从待审核列表移除。")) {
+                  rejectMutation.mutate();
+                }
+              }}
+            >
+              {rejectMutation.isPending ? "驳回中" : "驳回"}
+            </Button>
+            <Button
+              type="button"
+              className="h-10 px-4 text-sm"
+              disabled={sendMutation.isPending || draftText.trim().length === 0}
+              onClick={() => {
+                if (window.confirm("确认通过并发送这条回复到 Steam 吗？")) {
+                  sendMutation.mutate();
+                }
+              }}
+            >
+              <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+              {sendMutation.isPending ? "发送中" : "通过发送"}
+            </Button>
           </div>
         </div>
-        <div className="flex flex-wrap justify-end gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            disabled={saveMutation.isPending || draftText.trim().length === 0}
-            onClick={() => saveMutation.mutate()}
-          >
-            保存修改
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            disabled={regenerateMutation.isPending}
-            onClick={() => regenerateMutation.mutate()}
-          >
-            <RefreshCcw className="h-4 w-4" aria-hidden="true" />
-            {regenerateMutation.isPending ? "重新生成中..." : "重新生成"}
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            disabled={rejectMutation.isPending}
-            onClick={() => {
-              if (window.confirm("确认驳回这条草稿吗？驳回后会从待审核列表移除。")) {
-                rejectMutation.mutate();
-              }
-            }}
-          >
-            {rejectMutation.isPending ? "驳回中..." : "驳回草稿"}
-          </Button>
-          <Button
-            type="button"
-            disabled={sendMutation.isPending || draftText.trim().length === 0}
-            onClick={() => {
-              if (window.confirm("确认通过并发送这条回复到 Steam 吗？")) {
-                sendMutation.mutate();
-              }
-            }}
-          >
-            <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-            {sendMutation.isPending ? "发送中..." : "通过并发送"}
-          </Button>
-        </div>
+
+        {item.error_message ? (
+          <div className="rounded-[18px] bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+            生成失败：{item.error_message}
+          </div>
+        ) : null}
+
+        {sendMutation.isError ? (
+          <div className="rounded-[18px] bg-rose-50/90 px-4 py-3 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+            {(sendMutation.error as Error).message}
+          </div>
+        ) : null}
       </div>
 
-      {item.error_message ? (
-        <div className="mt-4 rounded-[22px] bg-rose-50/90 p-4 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          生成失败：{item.error_message}
-        </div>
-      ) : null}
-
-      {sendMutation.isError ? (
-        <div className="mt-4 rounded-[22px] bg-rose-50/90 p-4 text-sm text-rose-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
-          {(sendMutation.error as Error).message}
-        </div>
-      ) : null}
-      <div className="mt-5 space-y-4">
-        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+        <section className="rounded-[22px] bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
+            <span className="text-[11px] text-slate-400">{(item.review_text || "").length} 字</span>
+          </div>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
             {item.review_text || "暂无评论内容"}
           </p>
         </section>
 
-        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">回复草稿</p>
+        <section className="rounded-[22px] bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">回复草稿</p>
+            <span className="text-[11px] text-slate-400">{draftText.trim().length} 字</span>
+          </div>
           <textarea
-            className="mt-3 min-h-[220px] w-full resize-y rounded-[18px] border border-slate-200 bg-slate-50/60 px-4 py-4 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            className="mt-3 min-h-[168px] w-full resize-y rounded-[16px] border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-100"
             value={draftText}
             onChange={(event) => setDraftText(event.target.value)}
           />
@@ -422,7 +433,7 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
   });
 
   return (
-    <article className="rounded-[28px] bg-[linear-gradient(180deg,_rgba(240,253,244,0.92),_rgba(248,250,252,0.9))] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+    <article className="rounded-[26px] bg-[linear-gradient(180deg,_rgba(240,253,244,0.92),_rgba(248,250,252,0.9))] p-4 shadow-[0_14px_34px_rgba(15,23,42,0.06)]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-sm font-semibold text-slate-900">{item.persona_name || "匿名玩家"}</p>
@@ -441,6 +452,7 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
         <Button
           type="button"
           variant="outline"
+          className="h-10 px-4 text-sm"
           disabled={deleteMutation.isPending || item.delete_status === "requested"}
           onClick={() => {
             if (window.confirm("确认记录这条回复的删除需求吗？不会直接调用 Steam 删除。")) {
@@ -453,16 +465,22 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
         </Button>
       </div>
 
-      <div className="mt-5 space-y-4">
-        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
+      <div className="mt-4 grid gap-3 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+        <section className="rounded-[22px] bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">评论内容</p>
+            <span className="text-[11px] text-slate-400">{(item.review_text || "").length} 字</span>
+          </div>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-700">
             {item.review_text || "暂无评论内容"}
           </p>
         </section>
 
-        <section className="rounded-[24px] bg-white/92 p-4 shadow-[0_12px_32px_rgba(15,23,42,0.05)]">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">已发送回复</p>
+        <section className="rounded-[22px] bg-white/92 p-4 shadow-[0_10px_24px_rgba(15,23,42,0.05)]">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">已发送回复</p>
+            <span className="text-[11px] text-slate-400">{(item.content || "").length} 字</span>
+          </div>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-800">
             {item.content || "暂无回复内容"}
           </p>
@@ -487,10 +505,10 @@ function ColumnHeader({
     <div className="flex flex-wrap items-start justify-between gap-4 pb-4">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-slate-400">{eyebrow}</p>
-        <h2 className="mt-3 text-xl font-semibold text-slate-950">{title}</h2>
-        <p className="mt-2 text-sm text-slate-500">{description}</p>
+        <h2 className="mt-2 text-lg font-semibold text-slate-950">{title}</h2>
+        <p className="mt-1 text-sm text-slate-500">{description}</p>
       </div>
-      <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-sm font-medium text-slate-600">
+      <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
         {count} 条
       </span>
     </div>

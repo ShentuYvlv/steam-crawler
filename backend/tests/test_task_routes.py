@@ -312,11 +312,11 @@ async def test_task_list_sorts_active_first_and_supports_status_group_filter() -
 
     assert all_response.status_code == 200
     assert [item["status"] for item in all_response.json()] == [
+        "cancelled",
         "running",
         "waiting",
         "pending",
         "success",
-        "cancelled",
     ]
 
     assert active_response.status_code == 200
@@ -328,8 +328,8 @@ async def test_task_list_sorts_active_first_and_supports_status_group_filter() -
 
     assert terminal_response.status_code == 200
     assert [item["status"] for item in terminal_response.json()] == [
-        "success",
         "cancelled",
+        "success",
     ]
 
 

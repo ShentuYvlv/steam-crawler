@@ -1,7 +1,7 @@
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
-from sqlalchemy import case, desc, func, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from src.utils.oxylabs_diagnostics import fetch_proxy_location
@@ -46,24 +46,10 @@ ACTIVE_TASK_STATUSES = ("running", "waiting", "pending", "cancel_requested")
 TERMINAL_TASK_STATUSES = ("failed", "partial_success", "success", "cancelled")
 
 
-def _task_status_priority():
-    return case(
-        (SyncJob.status == "running", 0),
-        (SyncJob.status == "waiting", 1),
-        (SyncJob.status == "pending", 2),
-        (SyncJob.status == "cancel_requested", 3),
-        (SyncJob.status == "failed", 4),
-        (SyncJob.status == "partial_success", 5),
-        (SyncJob.status == "success", 6),
-        (SyncJob.status == "cancelled", 7),
-        else_=99,
-    )
-
-
 def _task_sort_timestamp():
     return func.coalesce(
-        SyncJob.started_at,
         SyncJob.finished_at,
+        SyncJob.started_at,
         SyncJob.created_at,
     )
 
@@ -91,7 +77,6 @@ async def list_tasks(
     result = await session.execute(
         statement
         .order_by(
-            _task_status_priority(),
             desc(_task_sort_timestamp()),
             desc(SyncJob.created_at),
             desc(SyncJob.id),

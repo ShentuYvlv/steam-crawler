@@ -174,6 +174,7 @@ export type ReplyDraftAuditItem = ReplyDraft & {
   app_id: number;
   game_name: string | null;
   recommendation_id: string;
+  review_url: string | null;
   review_text: string;
   persona_name: string | null;
   voted_up: boolean | null;
@@ -197,6 +198,7 @@ export type ReplyRecord = {
   updated_at: string;
   app_id?: number;
   game_name?: string | null;
+  review_url?: string | null;
   review_text?: string;
   persona_name?: string | null;
   voted_up?: boolean | null;

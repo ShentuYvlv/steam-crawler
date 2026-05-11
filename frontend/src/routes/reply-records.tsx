@@ -4,6 +4,7 @@ import {
   CalendarDays,
   CheckCircle2,
   Clock3,
+  ExternalLink,
   Gamepad2,
   MessageSquareMore,
   RefreshCcw,
@@ -324,6 +325,19 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
             </span>
           </p>
         </div>
+        {item.review_url ? (
+          <Button
+            asChild
+            type="button"
+            variant="outline"
+            className="h-8 px-3 text-xs"
+          >
+            <a href={item.review_url} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              打开 Steam
+            </a>
+          </Button>
+        ) : null}
       </div>
 
       {item.error_message ? (
@@ -447,20 +461,35 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
             </MetaChip>
           </div>
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-10 px-4 text-sm"
-          disabled={deleteMutation.isPending || item.delete_status === "requested"}
-          onClick={() => {
-            if (window.confirm("确认记录这条回复的删除需求吗？不会直接调用 Steam 删除。")) {
-              deleteMutation.mutate();
-            }
-          }}
-        >
-          <Trash2 className="h-4 w-4" aria-hidden="true" />
-          {item.delete_status === "requested" ? "已记录删除需求" : "记录删除需求"}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {item.review_url ? (
+            <Button
+              asChild
+              type="button"
+              variant="outline"
+              className="h-10 px-4 text-sm"
+            >
+              <a href={item.review_url} target="_blank" rel="noreferrer">
+                <ExternalLink className="h-4 w-4" aria-hidden="true" />
+                打开 Steam
+              </a>
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            className="h-10 px-4 text-sm"
+            disabled={deleteMutation.isPending || item.delete_status === "requested"}
+            onClick={() => {
+              if (window.confirm("确认记录这条回复的删除需求吗？不会直接调用 Steam 删除。")) {
+                deleteMutation.mutate();
+              }
+            }}
+          >
+            <Trash2 className="h-4 w-4" aria-hidden="true" />
+            {item.delete_status === "requested" ? "已记录删除需求" : "记录删除需求"}
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4 grid gap-3 xl:grid-cols-2">

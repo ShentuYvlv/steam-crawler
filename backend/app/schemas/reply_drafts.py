@@ -24,6 +24,7 @@ class ReplyDraftAuditListItem(ReplyDraftResponse):
     app_id: int
     game_name: str | None
     recommendation_id: str
+    review_url: str | None
     review_text: str
     persona_name: str | None
     voted_up: bool | None

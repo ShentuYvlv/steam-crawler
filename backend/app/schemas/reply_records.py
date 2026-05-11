@@ -36,6 +36,7 @@ class ReplyRecordResponse(BaseModel):
 class ReplyRecordListItem(ReplyRecordResponse):
     app_id: int
     game_name: str | None
+    review_url: str | None
     review_text: str
     persona_name: str | None
     voted_up: bool | None

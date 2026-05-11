@@ -37,6 +37,14 @@ class CountingSteamReplyClient:
         return None
 
 
+class FailingSteamReplyClient:
+    async def set_developer_response(self, recommendation_id: str, response_text: str) -> dict:
+        raise RuntimeError("steam send failed: invalid cookie or session")
+
+    async def close(self) -> None:
+        return None
+
+
 async def test_developer_reply_send_updates_record_review_and_draft() -> None:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
     async with engine.begin() as connection:
@@ -159,6 +167,42 @@ async def test_developer_reply_blocks_duplicate_send_when_pending_or_sent() -> N
             )
 
     await engine.dispose()
+
+
+async def test_developer_reply_failure_updates_draft_and_review_error_state() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FailingSteamReplyClient)
+
+        queued_record = await service.queue_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+        )
+
+        with pytest.raises(DeveloperReplyError, match="steam send failed"):
+            await service.perform_send(queued_record.id)
+
+        stored_record = await session.get(DeveloperReply, queued_record.id)
+        stored_review = await session.get(SteamReview, review.id)
+        stored_draft = await session.get(ReplyDraft, draft.id)
+
+    await engine.dispose()
+
+    assert stored_record is not None
+    assert stored_record.status == "failed"
+    assert "steam send failed" in (stored_record.error_message or "")
+    assert stored_review is not None
+    assert stored_review.reply_status == "send_failed"
+    assert stored_draft is not None
+    assert stored_draft.status == "send_failed"
+    assert "steam send failed" in (stored_draft.error_message or "")
 
 
 async def test_process_pending_reply_send_recreates_default_client_and_completes(monkeypatch) -> None:
@@ -335,6 +379,75 @@ async def test_reply_records_audit_queue_returns_latest_active_draft_per_review(
     assert response.json()[0]["id"] == newer_draft_id
     assert response.json()[0]["content"] == "latest draft content"
     assert response.json()[0]["review_id"] == review_id
+
+
+async def test_reply_records_audit_queue_keeps_sending_items_visible() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FakeSteamReplyClient)
+        await service.queue_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+        )
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/reply-records/audit-queue")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["status"] == "sending"
+
+
+async def test_reply_records_audit_queue_returns_send_failure_message() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as session:
+        review, draft = await seed_review_with_draft(session)
+        service = DeveloperReplyService(session, client_factory=FailingSteamReplyClient)
+        queued_record = await service.queue_reply(
+            review.id,
+            confirmed=True,
+            draft_id=draft.id,
+            content="final reply content",
+        )
+        with pytest.raises(DeveloperReplyError):
+            await service.perform_send(queued_record.id)
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/api/reply-records/audit-queue")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+    assert response.json()[0]["status"] == "send_failed"
+    assert "steam send failed" in (response.json()[0]["error_message"] or "")
 
 
 async def seed_review_with_draft(session: AsyncSession) -> tuple[SteamReview, ReplyDraft]:

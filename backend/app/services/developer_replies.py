@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ from app.core.error_utils import format_exception_message
 from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamReview
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
+logger = logging.getLogger(__name__)
 
 
 class SteamDeveloperReplyClient(Protocol):
@@ -100,6 +102,7 @@ class DeveloperReplyService:
         if draft is not None:
             draft.content = reply_content
             draft.status = "sending"
+            draft.error_message = None
             draft.reviewed_by_user_id = sent_by_user_id
             draft.reviewed_at = now
         review.reply_status = "sending"
@@ -171,6 +174,7 @@ class DeveloperReplyService:
             review.developer_response_created_at = now
             if draft is not None:
                 draft.status = "sent"
+                draft.error_message = None
                 if draft.reviewed_at is None:
                     draft.reviewed_at = now
             self.session.add(
@@ -195,7 +199,13 @@ class DeveloperReplyService:
             review.reply_status = "send_failed"
             if draft is not None:
                 draft.status = "send_failed"
+                draft.error_message = message
             await self.session.commit()
+            logger.exception(
+                "Steam developer reply send failed for record_id=%s review_id=%s",
+                record.id,
+                review.id,
+            )
             raise DeveloperReplyError(message, record.id) from exc
         finally:
             if client is not None:
@@ -259,7 +269,12 @@ async def process_pending_reply_send(record_id: int) -> None:
         service = DeveloperReplyService(session)
         try:
             await service.perform_send(record_id)
-        except DeveloperReplyError:
+        except DeveloperReplyError as exc:
+            logger.warning(
+                "Background Steam developer reply send failed for record_id=%s: %s",
+                record_id,
+                exc,
+            )
             return
 
 

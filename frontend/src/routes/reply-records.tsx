@@ -308,6 +308,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
       refreshReplyState();
     },
   });
+  const isSending = item.status === "sending" || sendMutation.isPending;
 
   return (
     <article className="soft-panel overflow-hidden border border-amber-100 bg-[linear-gradient(180deg,_rgba(255,251,235,0.9),_rgba(255,255,255,0.96))] p-3.5">
@@ -342,7 +343,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
 
       {item.error_message ? (
         <div className="mt-3 rounded-2xl border border-rose-100 bg-rose-50 px-3 py-2.5 text-sm text-rose-700">
-          生成失败：{item.error_message}
+          {getDraftErrorPrefix(item.status)}：{item.error_message}
         </div>
       ) : null}
 
@@ -382,7 +383,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
           type="button"
           variant="outline"
           className="h-8 px-3 text-xs"
-          disabled={saveMutation.isPending || draftText.trim().length === 0}
+          disabled={isSending || saveMutation.isPending || draftText.trim().length === 0}
           onClick={() => saveMutation.mutate()}
         >
           {saveMutation.isPending ? "保存中" : "保存"}
@@ -391,7 +392,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
           type="button"
           variant="secondary"
           className="h-8 px-3 text-xs"
-          disabled={regenerateMutation.isPending}
+          disabled={isSending || regenerateMutation.isPending}
           onClick={() => regenerateMutation.mutate()}
         >
           <RefreshCcw className="h-4 w-4" aria-hidden="true" />
@@ -401,7 +402,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
           type="button"
           variant="outline"
           className="h-8 px-3 text-xs"
-          disabled={rejectMutation.isPending}
+          disabled={isSending || rejectMutation.isPending}
           onClick={() => {
             if (window.confirm("确认驳回这条草稿吗？驳回后会从待审核列表移除。")) {
               rejectMutation.mutate();
@@ -413,7 +414,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
         <Button
           type="button"
           className="h-8 flex-1 px-3 text-xs"
-          disabled={sendMutation.isPending || draftText.trim().length === 0}
+          disabled={isSending || draftText.trim().length === 0}
           onClick={() => {
             if (window.confirm("确认通过并发送这条回复到 Steam 吗？")) {
               sendMutation.mutate();
@@ -421,7 +422,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
           }}
         >
           <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-          {sendMutation.isPending ? "发送中" : "通过发送"}
+          {isSending ? "发送中" : "通过发送"}
         </Button>
       </div>
     </article>
@@ -964,6 +965,9 @@ function formatDayLabel(dayKey: string) {
 }
 
 function getDraftStatusLabel(status: string) {
+  if (status === "sending") {
+    return "发送中";
+  }
   if (status === "generation_failed") {
     return "生成失败";
   }
@@ -971,6 +975,13 @@ function getDraftStatusLabel(status: string) {
     return "发送失败";
   }
   return "待审核";
+}
+
+function getDraftErrorPrefix(status: string) {
+  if (status === "send_failed") {
+    return "发送失败";
+  }
+  return "生成失败";
 }
 
 export const replyRecordsRoute = createRoute({

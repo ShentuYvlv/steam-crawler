@@ -19,8 +19,8 @@ from app.schemas import (
 router = APIRouter(prefix="/reply-records", tags=["reply-records"])
 SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
-ACTIVE_AUDIT_DRAFT_STATUSES = ["pending_review", "generation_failed", "send_failed"]
-ACTIVE_AUDIT_REVIEW_STATUSES = ["drafted", "generation_failed", "send_failed"]
+ACTIVE_AUDIT_DRAFT_STATUSES = ["pending_review", "generation_failed", "send_failed", "sending"]
+ACTIVE_AUDIT_REVIEW_STATUSES = ["drafted", "generation_failed", "send_failed", "sending"]
 
 
 @router.get("", response_model=list[ReplyRecordListItem])
@@ -80,11 +80,27 @@ async def list_reply_audit_queue(
         .group_by(ReplyDraft.review_id)
         .subquery()
     )
+    latest_reply_subquery = (
+        select(
+            DeveloperReply.review_id.label("review_id"),
+            func.max(DeveloperReply.id).label("reply_record_id"),
+        )
+        .group_by(DeveloperReply.review_id)
+        .subquery()
+    )
     statement = (
-        select(ReplyDraft, SteamReview, SteamGame)
+        select(ReplyDraft, SteamReview, SteamGame, DeveloperReply)
         .join(latest_active_draft_subquery, latest_active_draft_subquery.c.draft_id == ReplyDraft.id)
         .join(SteamReview, SteamReview.id == ReplyDraft.review_id)
         .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
+        .outerjoin(
+            latest_reply_subquery,
+            latest_reply_subquery.c.review_id == SteamReview.id,
+        )
+        .outerjoin(
+            DeveloperReply,
+            DeveloperReply.id == latest_reply_subquery.c.reply_record_id,
+        )
         .where(ReplyDraft.status.in_(ACTIVE_AUDIT_DRAFT_STATUSES))
         .where(SteamReview.reply_status.in_(ACTIVE_AUDIT_REVIEW_STATUSES))
         .order_by(
@@ -101,10 +117,15 @@ async def list_reply_audit_queue(
 
     result = await session.execute(statement)
     items: list[ReplyDraftAuditListItem] = []
-    for draft, review, game in result.all():
+    for draft, review, game, latest_reply in result.all():
         items.append(
             ReplyDraftAuditListItem(
-                **draft_to_response(draft),
+                **draft_to_response(
+                    draft,
+                    fallback_error_message=(
+                        latest_reply.error_message if latest_reply is not None else None
+                    ),
+                ),
                 app_id=review.app_id,
                 game_name=game.name,
                 recommendation_id=review.recommendation_id,
@@ -149,7 +170,11 @@ async def create_delete_request(
     return record
 
 
-def draft_to_response(draft: ReplyDraft) -> dict:
+def draft_to_response(
+    draft: ReplyDraft,
+    *,
+    fallback_error_message: str | None = None,
+) -> dict:
     return {
         "id": draft.id,
         "review_id": draft.review_id,
@@ -159,7 +184,7 @@ def draft_to_response(draft: ReplyDraft) -> dict:
         "status": draft.status,
         "model_name": draft.model_name,
         "prompt_snapshot": draft.prompt_snapshot,
-        "error_message": draft.error_message,
+        "error_message": draft.error_message or fallback_error_message,
         "reviewed_at": draft.reviewed_at,
         "created_at": draft.created_at,
         "updated_at": draft.updated_at,

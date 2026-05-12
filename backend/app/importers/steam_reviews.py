@@ -35,7 +35,7 @@ def steam_api_review_to_values(app_id: int, review: dict[str, Any]) -> dict[str,
         "last_played": parse_unix_timestamp(author.get("last_played")),
         "sync_type": "incremental",
         "source_type": "steam_api",
-        "processing_status": "pending",
+        "processing_status": "completed" if developer_response else "pending",
         "reply_status": "replied" if developer_response else "none",
         "developer_response": developer_response,
         "developer_response_created_at": parse_unix_timestamp(

@@ -322,7 +322,7 @@ function DraftCard({ item }: { item: ReplyDraftAuditItem }) {
             {item.persona_name || "匿名玩家"}
             <span className="px-2 text-slate-300">|</span>
             <span className="text-[13px] font-medium text-slate-500">
-              {formatDateTime(item.timestamp_created ?? item.created_at)}
+              {formatDateTime(getDraftTimestamp(item))}
             </span>
           </p>
         </div>
@@ -458,7 +458,7 @@ function SentRecordCard({ item }: { item: ReplyRecord }) {
               帖子 #{item.review_id}
             </MetaChip>
             <MetaChip icon={<Clock3 className="h-3.5 w-3.5" />}>
-              {formatDateTime(item.sent_at ?? item.created_at)}
+              {formatDateTime(getRecordTimestamp(item))}
             </MetaChip>
           </div>
         </div>
@@ -901,11 +901,11 @@ function upsertDaySummary(
 }
 
 function getDraftTimestamp(item: ReplyDraftAuditItem) {
-  return item.timestamp_created ?? item.created_at;
+  return item.reviewed_at ?? item.updated_at ?? item.created_at;
 }
 
 function getRecordTimestamp(item: ReplyRecord) {
-  return item.timestamp_created ?? item.sent_at ?? item.created_at;
+  return item.sent_at ?? item.updated_at ?? item.created_at;
 }
 
 function getDraftDayKey(item: ReplyDraftAuditItem) {

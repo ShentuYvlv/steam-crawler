@@ -1,7 +1,11 @@
 from datetime import datetime
+from io import BytesIO
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
+from openpyxl import Workbook
 from sqlalchemy import Select, asc, desc, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.utils.task_control import TaskCancelledError
@@ -53,6 +57,7 @@ SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 async def list_reviews(
     session: SessionDependency,
     app_id: int | None = Query(default=None, gt=0),
+    review_group: str | None = Query(default=None, pattern="^(pending|replied)$"),
     voted_up: bool | None = None,
     min_votes_up: int | None = Query(default=None, ge=0),
     max_votes_up: int | None = Query(default=None, ge=0),
@@ -71,6 +76,7 @@ async def list_reviews(
     statement = _apply_review_filters(
         select(SteamReview),
         app_id=app_id,
+        review_group=review_group,
         voted_up=voted_up,
         min_votes_up=min_votes_up,
         max_votes_up=max_votes_up,
@@ -85,6 +91,7 @@ async def list_reviews(
     count_statement = _apply_review_filters(
         select(func.count(SteamReview.id)),
         app_id=app_id,
+        review_group=review_group,
         voted_up=voted_up,
         min_votes_up=min_votes_up,
         max_votes_up=max_votes_up,
@@ -109,6 +116,156 @@ async def list_reviews(
         total=total or 0,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.get("/export.xlsx")
+async def export_reviews_excel(
+    session: SessionDependency,
+    app_id: int | None = Query(default=None, gt=0),
+    export_scope: str = Query(default="current", pattern="^(current|all)$"),
+    review_group: str | None = Query(default=None, pattern="^(pending|replied)$"),
+    voted_up: bool | None = None,
+    min_votes_up: int | None = Query(default=None, ge=0),
+    max_votes_up: int | None = Query(default=None, ge=0),
+    created_from: datetime | None = None,
+    created_to: datetime | None = None,
+    min_playtime: float | None = Query(default=None, ge=0),
+    max_playtime: float | None = Query(default=None, ge=0),
+    processing_status: str | None = None,
+    reply_status: str | None = None,
+    keyword: str | None = None,
+    sort_by: str = Query(default="timestamp_created"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+) -> StreamingResponse:
+    if export_scope == "all":
+        statement = _apply_review_filters(
+            select(SteamReview),
+            app_id=app_id,
+            review_group=None,
+            voted_up=None,
+            min_votes_up=None,
+            max_votes_up=None,
+            created_from=None,
+            created_to=None,
+            min_playtime=None,
+            max_playtime=None,
+            processing_status=None,
+            reply_status=None,
+            keyword=None,
+        )
+    else:
+        statement = _apply_review_filters(
+            select(SteamReview),
+            app_id=app_id,
+            review_group=review_group,
+            voted_up=voted_up,
+            min_votes_up=min_votes_up,
+            max_votes_up=max_votes_up,
+            created_from=created_from,
+            created_to=created_to,
+            min_playtime=min_playtime,
+            max_playtime=max_playtime,
+            processing_status=processing_status,
+            reply_status=reply_status,
+            keyword=keyword,
+        )
+
+    sort_column = _get_review_sort_column(sort_by)
+    sort_expression = asc(sort_column) if sort_order == "asc" else desc(sort_column)
+    result = await session.execute(statement.order_by(sort_expression, desc(SteamReview.id)))
+    reviews = list(result.scalars().all())
+
+    workbook = Workbook()
+    worksheet = workbook.active
+    worksheet.title = "Reviews"
+    worksheet.append(
+        [
+            "评论ID",
+            "AppID",
+            "RecommendationID",
+            "昵称",
+            "SteamID",
+            "评价",
+            "处理状态",
+            "回复状态",
+            "语言",
+            "点赞",
+            "有趣",
+            "回复数",
+            "总游玩时长(h)",
+            "评论时长(h)",
+            "发布时间",
+            "更新时间",
+            "评论链接",
+            "开发者回复",
+            "开发者回复时间",
+            "评论内容",
+        ]
+    )
+
+    for review in reviews:
+        worksheet.append(
+            [
+                review.id,
+                review.app_id,
+                review.recommendation_id,
+                review.persona_name,
+                review.steam_id,
+                "好评" if review.voted_up is True else "差评" if review.voted_up is False else "",
+                review.processing_status,
+                review.reply_status,
+                review.language,
+                review.votes_up,
+                review.votes_funny,
+                review.comment_count,
+                review.playtime_forever,
+                review.playtime_at_review,
+                _format_excel_datetime(review.timestamp_created),
+                _format_excel_datetime(review.timestamp_updated),
+                review.review_url,
+                review.developer_response,
+                _format_excel_datetime(review.developer_response_created_at),
+                review.review_text,
+            ]
+        )
+
+    for column_letter, width in {
+        "A": 10,
+        "B": 10,
+        "C": 18,
+        "D": 20,
+        "E": 20,
+        "F": 10,
+        "G": 12,
+        "H": 12,
+        "I": 10,
+        "J": 10,
+        "K": 10,
+        "L": 10,
+        "M": 14,
+        "N": 14,
+        "O": 18,
+        "P": 18,
+        "Q": 48,
+        "R": 40,
+        "S": 18,
+        "T": 80,
+    }.items():
+        worksheet.column_dimensions[column_letter].width = width
+
+    buffer = BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+
+    filename = _build_review_export_filename(app_id=app_id, export_scope=export_scope)
+    headers = {
+        "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+    }
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers=headers,
     )
 
 
@@ -524,6 +681,7 @@ def _apply_review_filters(
     statement: Select,
     *,
     app_id: int | None,
+    review_group: str | None,
     voted_up: bool | None,
     min_votes_up: int | None,
     max_votes_up: int | None,
@@ -537,6 +695,10 @@ def _apply_review_filters(
 ) -> Select:
     if app_id is not None:
         statement = statement.where(SteamReview.app_id == app_id)
+    if review_group == "pending":
+        statement = statement.where(SteamReview.reply_status != "replied")
+    if review_group == "replied":
+        statement = statement.where(SteamReview.reply_status == "replied")
     if voted_up is not None:
         statement = statement.where(SteamReview.voted_up == voted_up)
     if min_votes_up is not None:
@@ -587,3 +749,16 @@ def _status_update_values(
     if request.reply_status is not None:
         values["reply_status"] = request.reply_status
     return values
+
+
+def _format_excel_datetime(value: datetime | None) -> str:
+    if value is None:
+        return ""
+    return value.astimezone().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def _build_review_export_filename(app_id: int | None, export_scope: str) -> str:
+    scope_label = "当前筛选" if export_scope == "current" else "全部评论"
+    app_label = f"app{app_id}" if app_id is not None else "all"
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"steam评论列表_{app_label}_{scope_label}_{timestamp}.xlsx"

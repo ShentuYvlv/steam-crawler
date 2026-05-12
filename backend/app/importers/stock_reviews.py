@@ -55,7 +55,7 @@ def stock_review_row_to_values(row: dict[str, str], default_app_id: int | None =
         "last_played": parse_datetime(row.get("最后游玩时间")),
         "sync_type": "stock",
         "source_type": "csv",
-        "processing_status": "pending",
+        "processing_status": "completed" if developer_response else "pending",
         "reply_status": "replied" if developer_response else "none",
         "developer_response": developer_response,
         "developer_response_created_at": parse_datetime(row.get("开发者回复时间")),

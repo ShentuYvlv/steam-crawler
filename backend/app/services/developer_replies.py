@@ -204,6 +204,7 @@ class DeveloperReplyService:
             record.error_message = None
             record.steam_response = json.dumps(steam_result.get("response"), ensure_ascii=False)
             record.sent_at = now
+            review.processing_status = "completed"
             review.reply_status = "replied"
             review.developer_response = record.content
             review.developer_response_created_at = now

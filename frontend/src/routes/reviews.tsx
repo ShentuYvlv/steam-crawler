@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  Download,
   ExternalLink,
   Inbox,
   RefreshCcw,
@@ -21,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import {
   bulkGenerateReplyDrafts,
   bulkUpdateReviewStatus,
+  downloadReviewsExcel,
   fetchGames,
   fetchReviewDetail,
   fetchReviewReplyDrafts,
@@ -41,6 +43,7 @@ const selectedReviewGameKey = "steam_reviews_selected_app_id";
 
 const defaultFilters: ReviewQuery = {
   app_id: "",
+  review_group: "pending",
   voted_up: "",
   min_votes_up: "",
   max_votes_up: "",
@@ -58,7 +61,8 @@ const defaultFilters: ReviewQuery = {
 const processingStatusText: Record<string, string> = {
   pending: "待处理",
   on_hold: "待定",
-  ignored: "已忽略"
+  ignored: "已忽略",
+  completed: "已处理"
 };
 
 const replyStatusText: Record<string, string> = {
@@ -68,9 +72,7 @@ const replyStatusText: Record<string, string> = {
   rejected: "已驳回"
 };
 
-replyStatusText.sending = "鍙戦€佷腑";
-
-replyStatusText.sending = "Sending";
+replyStatusText.sending = "发送中";
 
 function ReviewsPage() {
   const queryClient = useQueryClient();
@@ -134,6 +136,12 @@ function ReviewsPage() {
       setDraftNotice(error instanceof Error ? error.message : "批量生成草稿失败");
     }
   });
+  const exportMutation = useMutation({
+    mutationFn: ({ scope }: { scope: "current" | "all" }) => downloadReviewsExcel(filters, scope),
+    onError: (error) => {
+      setDraftNotice(error instanceof Error ? error.message : "导出 Excel 失败");
+    }
+  });
   const totalPages = useMemo(() => {
     const total = reviewsQuery.data?.total ?? 0;
     const pageSize = filters.page_size ?? 50;
@@ -179,7 +187,11 @@ function ReviewsPage() {
   }
 
   function resetFilters() {
-    setFilters({ ...defaultFilters, app_id: filters.app_id });
+    setFilters({
+      ...defaultFilters,
+      app_id: filters.app_id,
+      review_group: filters.review_group ?? defaultFilters.review_group
+    });
     setSelectedIds([]);
   }
 
@@ -237,6 +249,24 @@ function ReviewsPage() {
             <Button type="button" variant="outline" onClick={resetFilters}>
               重置筛选
             </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exportMutation.isPending || !filters.app_id}
+              onClick={() => exportMutation.mutate({ scope: "current" })}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              {exportMutation.isPending ? "导出中" : "导出当前"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={exportMutation.isPending || !filters.app_id}
+              onClick={() => exportMutation.mutate({ scope: "all" })}
+            >
+              <Download className="h-4 w-4" aria-hidden="true" />
+              {exportMutation.isPending ? "导出中" : "导出全部"}
+            </Button>
             <Button type="button" onClick={() => void queryClient.invalidateQueries({ queryKey: ["reviews"] })}>
               <RefreshCcw className="h-4 w-4" aria-hidden="true" />
               刷新数据
@@ -245,6 +275,33 @@ function ReviewsPage() {
         </div>
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
+          <div className="sm:col-span-2 xl:col-span-6">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">评论分组</span>
+            <div className="mt-2 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm shadow-slate-100">
+              <button
+                type="button"
+                className={
+                  filters.review_group !== "replied"
+                    ? "rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                    : "rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                }
+                onClick={() => updateFilter("review_group", "pending")}
+              >
+                待处理
+              </button>
+              <button
+                type="button"
+                className={
+                  filters.review_group === "replied"
+                    ? "rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                    : "rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                }
+                onClick={() => updateFilter("review_group", "replied")}
+              >
+                已回复
+              </button>
+            </div>
+          </div>
           <GameSwitchField
             games={gamesQuery.data ?? []}
             value={filters.app_id}
@@ -288,6 +345,7 @@ function ReviewsPage() {
             <option value="pending">待处理</option>
             <option value="on_hold">待定</option>
             <option value="ignored">忽略</option>
+            <option value="completed">已处理</option>
           </FilterSelect>
           <FilterSelect
             label="回复状态"
@@ -612,7 +670,7 @@ function ReviewRow({
         <p className="mt-1 text-xs text-slate-400">评论时 {item.playtime_at_review ?? "-"}h</p>
       </td>
       <td className="px-4 py-4">
-        <StatusBadge status={item.processing_status} />
+        <StatusBadge status={resolveProcessingStatus(item.processing_status, item.reply_status)} />
         <p className="mt-2 text-xs text-slate-500">{replyStatusText[item.reply_status] ?? item.reply_status}</p>
       </td>
       <td className="px-4 py-4 text-xs font-medium text-slate-500">{formatDate(item.timestamp_created)}</td>
@@ -651,7 +709,7 @@ function MobileReviewCard({
           />
           <ReviewSentiment votedUp={item.voted_up} />
         </div>
-        <StatusBadge status={item.processing_status} />
+        <StatusBadge status={resolveProcessingStatus(item.processing_status, item.reply_status)} />
       </div>
       <button type="button" className="mt-4 block text-left" onClick={onOpen}>
         <span className="line-clamp-3 text-sm font-semibold leading-6 text-slate-950">
@@ -812,7 +870,7 @@ function ReviewDetailPanel({
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Review Detail</p>
           <h2 className="mt-2 text-xl font-semibold text-slate-950">评论详情</h2>
         </div>
-        <StatusBadge status={review.processing_status} />
+        <StatusBadge status={resolveProcessingStatus(review.processing_status, review.reply_status)} />
       </div>
 
       <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
@@ -1094,8 +1152,17 @@ function StatusBadge({ status }: { status: string }) {
       ? "bg-slate-100 text-slate-600 ring-slate-200"
       : status === "on_hold"
         ? "bg-amber-50 text-amber-700 ring-amber-100"
+        : status === "completed"
+          ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
         : "bg-blue-50 text-blue-700 ring-blue-100";
   return <span className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${className}`}>{label}</span>;
+}
+
+function resolveProcessingStatus(processingStatus: string, replyStatus: string) {
+  if (replyStatus === "replied" && processingStatus === "pending") {
+    return "completed";
+  }
+  return processingStatus;
 }
 
 function DetailItem({ label, value }: { label: string; value: string | number }) {
@@ -1183,6 +1250,8 @@ function getActiveFilters(filters: ReviewQuery, games: GameListItem[]) {
     const selectedGame = games.find((game) => String(game.app_id) === filters.app_id);
     chips.push(selectedGame?.name ? `${selectedGame.name} · App ${filters.app_id}` : `App ${filters.app_id}`);
   }
+  if (filters.review_group === "pending") chips.push("待处理分组");
+  if (filters.review_group === "replied") chips.push("已回复分组");
   if (filters.voted_up === "true") chips.push("好评");
   if (filters.voted_up === "false") chips.push("差评");
   if (filters.min_votes_up) chips.push(`点赞 ≥ ${filters.min_votes_up}`);

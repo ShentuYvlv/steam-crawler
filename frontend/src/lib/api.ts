@@ -116,6 +116,7 @@ export type ReviewListResponse = {
 
 export type ReviewQuery = {
   app_id?: string;
+  review_group?: string;
   voted_up?: string;
   min_votes_up?: string;
   max_votes_up?: string;
@@ -386,6 +387,59 @@ export async function syncAllGames(): Promise<GameSyncBatchResponse> {
 
 export async function fetchReviews(query: ReviewQuery): Promise<ReviewListResponse> {
   return apiGet<ReviewListResponse>(`/reviews${toQueryString(query)}`);
+}
+
+export async function downloadReviewsExcel(
+  query: ReviewQuery,
+  exportScope: "current" | "all"
+): Promise<void> {
+  const params = new URLSearchParams();
+  params.set("export_scope", exportScope);
+
+  if (exportScope === "all") {
+    if (query.app_id) {
+      params.set("app_id", String(query.app_id));
+    }
+    if (query.sort_by) {
+      params.set("sort_by", String(query.sort_by));
+    }
+    if (query.sort_order) {
+      params.set("sort_order", String(query.sort_order));
+    }
+  } else {
+    Object.entries(query).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && value !== "") {
+        params.set(key, String(value));
+      }
+    });
+  }
+
+  const token = getAccessToken();
+  const response = await fetch(`${apiBaseUrl}/reviews/export.xlsx?${params.toString()}`, {
+    method: "GET",
+    headers: token ? { Authorization: `Bearer ${token}` } : {}
+  });
+
+  if (!response.ok) {
+    if (response.status === 401) {
+      clearAccessToken();
+    }
+    const message = await response.text();
+    throw new Error(message || `HTTP ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const disposition = response.headers.get("Content-Disposition");
+  const filenameMatch = disposition?.match(/filename\*=UTF-8''([^;]+)/i);
+  const filename = filenameMatch ? decodeURIComponent(filenameMatch[1]) : "steam评论列表.xlsx";
+  const url = window.URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.URL.revokeObjectURL(url);
 }
 
 export async function fetchReviewDetail(reviewId: number): Promise<ReviewDetail> {

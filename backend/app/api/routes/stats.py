@@ -36,7 +36,10 @@ async def get_stats_overview(session: SessionDependency) -> StatsOverviewRespons
     )
     pending_reviews = (
         await session.scalar(
-            select(func.count(SteamReview.id)).where(SteamReview.processing_status == "pending")
+            select(func.count(SteamReview.id)).where(
+                SteamReview.processing_status == "pending",
+                SteamReview.reply_status != "replied",
+            )
         )
         or 0
     )

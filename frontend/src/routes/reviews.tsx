@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock3,
+  ExternalLink,
   Inbox,
   RefreshCcw,
   Search,
@@ -580,6 +581,21 @@ function ReviewRow({
           <span className="h-1 w-1 rounded-full bg-slate-300" />
           <span className="shrink-0">{item.language ?? "unknown"}</span>
         </div>
+        {item.review_url ? (
+          <div className="mt-3">
+            <Button asChild type="button" variant="outline" className="h-8 rounded-lg px-3 text-xs">
+              <a
+                href={item.review_url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                打开原链接
+              </a>
+            </Button>
+          </div>
+        ) : null}
       </td>
       <td className="px-4 py-4">
         <div className="flex items-center gap-2 font-semibold text-slate-900">
@@ -642,6 +658,16 @@ function MobileReviewCard({
           {item.review_text || "无文本"}
         </span>
       </button>
+      {item.review_url ? (
+        <div className="mt-3">
+          <Button asChild type="button" variant="outline" className="h-9 w-full rounded-xl text-xs">
+            <a href={item.review_url} target="_blank" rel="noreferrer">
+              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              打开原链接
+            </a>
+          </Button>
+        </div>
+      ) : null}
       <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
         <MiniStat label="点赞" value={item.votes_up} />
         <MiniStat label="时长" value={`${item.playtime_forever ?? "-"}h`} />

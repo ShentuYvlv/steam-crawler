@@ -70,6 +70,7 @@ export type ReviewListItem = {
   id: number;
   app_id: number;
   recommendation_id: string;
+  review_url: string | null;
   steam_id: string | null;
   persona_name: string | null;
   language: string | null;

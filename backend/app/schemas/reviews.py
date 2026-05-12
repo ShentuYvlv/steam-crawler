@@ -7,6 +7,7 @@ class ReviewListItem(BaseModel):
     id: int
     app_id: int
     recommendation_id: str
+    review_url: str | None
     steam_id: str | None
     persona_name: str | None
     language: str | None

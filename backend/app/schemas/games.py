@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 class GameListItem(BaseModel):
     app_id: int
     name: str | None
+    game_scope: str
     review_count: int
     has_schedule: bool = False
     schedule_id: int | None = None
@@ -43,11 +44,13 @@ class GameSyncOptionsPayload(BaseModel):
 class GameCreateRequest(BaseModel):
     app_id: int = Field(gt=0)
     name: str = Field(min_length=1, max_length=255)
+    game_scope: str = Field(default="competitor", pattern="^(owned|competitor)$")
     sync: GameSyncOptionsPayload | None = None
 
 
 class GameUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=255)
+    game_scope: str = Field(default="competitor", pattern="^(owned|competitor)$")
     sync: GameSyncOptionsPayload | None = None
 
 

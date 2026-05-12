@@ -18,9 +18,9 @@ async def test_games_route_returns_all_games_with_schedule_and_latest_task() -> 
     async with session_factory() as seed_session:
         seed_session.add_all(
             [
-                SteamGame(app_id=3350200, name="情感反诈模拟器"),
-                SteamGame(app_id=4000000, name="备用游戏"),
-                SteamGame(app_id=5000000, name="零评论游戏"),
+                SteamGame(app_id=3350200, name="情感反诈模拟器", game_scope="owned"),
+                SteamGame(app_id=4000000, name="备用游戏", game_scope="competitor"),
+                SteamGame(app_id=5000000, name="零评论游戏", game_scope="competitor"),
             ]
         )
         schedule = TaskSchedule(
@@ -92,6 +92,7 @@ async def test_games_route_returns_all_games_with_schedule_and_latest_task() -> 
     payload = response.json()
     assert payload[0]["name"] == "备用游戏"
     game = next(item for item in payload if item["app_id"] == 3350200)
+    assert game["game_scope"] == "owned"
     assert game["review_count"] == 2
     assert game["has_schedule"] is True
     assert game["schedule_enabled"] is True
@@ -107,7 +108,7 @@ async def test_game_mutation_routes_and_sync_actions(monkeypatch) -> None:
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as seed_session:
-        seed_session.add(SteamGame(app_id=3350200, name="情感反诈模拟器"))
+        seed_session.add(SteamGame(app_id=3350200, name="情感反诈模拟器", game_scope="owned"))
         admin = User(
             username="admin",
             password_hash=hash_password("password123"),
@@ -137,6 +138,7 @@ async def test_game_mutation_routes_and_sync_actions(monkeypatch) -> None:
                 json={
                     "app_id": 4000000,
                     "name": "新增游戏",
+                    "game_scope": "competitor",
                     "sync": {
                         "enabled": True,
                         "hour": 13,
@@ -154,6 +156,7 @@ async def test_game_mutation_routes_and_sync_actions(monkeypatch) -> None:
                 headers=headers,
                 json={
                     "name": "情感反诈模拟器-新版",
+                    "game_scope": "owned",
                     "sync": {
                         "enabled": False,
                         "hour": 15,
@@ -173,10 +176,12 @@ async def test_game_mutation_routes_and_sync_actions(monkeypatch) -> None:
         await engine.dispose()
 
     assert create_response.status_code == 201
+    assert create_response.json()["game_scope"] == "competitor"
     assert create_response.json()["schedule_enabled"] is True
     assert create_response.json()["schedule_hour"] == 13
     assert update_response.status_code == 200
     assert update_response.json()["name"] == "情感反诈模拟器-新版"
+    assert update_response.json()["game_scope"] == "owned"
     assert update_response.json()["schedule_enabled"] is False
     assert update_response.json()["schedule_options"]["language"] == "english"
     assert sync_one_response.status_code == 202

@@ -18,6 +18,7 @@ import { rootRoute } from "@/routes/__root";
 type GameFormState = {
   appId: string;
   name: string;
+  gameScope: "owned" | "competitor";
   hasSyncConfig: boolean;
   enabled: boolean;
   hour: string;
@@ -32,6 +33,7 @@ type GameFormState = {
 const defaultGameForm: GameFormState = {
   appId: "",
   name: "",
+  gameScope: "competitor",
   hasSyncConfig: false,
   enabled: false,
   hour: "9",
@@ -181,6 +183,7 @@ function GamesPage() {
               <thead className="bg-slate-50/80 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-5 py-3">游戏名</th>
+                  <th className="px-4 py-3">分类</th>
                   <th className="px-4 py-3">App ID</th>
                   <th className="px-4 py-3">评论数</th>
                   <th className="px-4 py-3">监控状态</th>
@@ -199,6 +202,11 @@ function GamesPage() {
                   >
                     <td className="px-5 py-4">
                       <div className="font-medium text-slate-950">{game.name || `App ${game.app_id}`}</div>
+                    </td>
+                    <td className="px-4 py-4">
+                      <span className={game.game_scope === "owned" ? "badge-green" : "badge-orange"}>
+                        {game.game_scope === "owned" ? "自家" : "竞品"}
+                      </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-500">{game.app_id}</td>
                     <td className="px-4 py-4 text-sm text-slate-700">{game.review_count.toLocaleString()}</td>
@@ -271,6 +279,16 @@ function GamesPage() {
               disabled={!!selectedGame && !isCreating}
               onChange={(value) => setForm((current) => ({ ...current, appId: value }))}
             />
+            <SelectField
+              label="游戏分类"
+              value={form.gameScope}
+              onChange={(value) =>
+                setForm((current) => ({ ...current, gameScope: value as "owned" | "competitor" }))
+              }
+            >
+              <option value="competitor">竞品</option>
+              <option value="owned">自家游戏</option>
+            </SelectField>
             <label className="flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-700">
               <input
                 type="checkbox"
@@ -425,6 +443,7 @@ function gameToForm(game: GameListItem): GameFormState {
   return {
     appId: String(game.app_id),
     name: game.name ?? "",
+    gameScope: game.game_scope,
     hasSyncConfig: game.has_schedule,
     enabled: game.schedule_enabled,
     hour: String(game.schedule_hour ?? 9),
@@ -441,6 +460,7 @@ function formToPayload(form: GameFormState): GamePayload {
   return {
     app_id: Number(form.appId),
     name: form.name.trim(),
+    game_scope: form.gameScope,
     sync: form.hasSyncConfig
       ? {
           enabled: form.enabled,

@@ -34,6 +34,7 @@ async def list_reply_records(
         select(DeveloperReply, SteamReview, SteamGame)
         .join(SteamReview, SteamReview.id == DeveloperReply.review_id)
         .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
+        .where(SteamGame.game_scope == "owned")
         .order_by(
             desc(SteamReview.timestamp_created),
             desc(DeveloperReply.sent_at),
@@ -101,6 +102,7 @@ async def list_reply_audit_queue(
             DeveloperReply,
             DeveloperReply.id == latest_reply_subquery.c.reply_record_id,
         )
+        .where(SteamGame.game_scope == "owned")
         .where(ReplyDraft.status.in_(ACTIVE_AUDIT_DRAFT_STATUSES))
         .where(SteamReview.reply_status.in_(ACTIVE_AUDIT_REVIEW_STATUSES))
         .order_by(
@@ -152,6 +154,12 @@ async def create_delete_request(
     record = await session.get(DeveloperReply, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Reply record not found")
+    review = await session.get(SteamReview, record.review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+    game = await session.get(SteamGame, review.app_id)
+    if game is None or game.game_scope != "owned":
+        raise HTTPException(status_code=403, detail="Competitor games do not support reply operations")
 
     record.delete_status = "requested"
     record.delete_request_reason = request.reason

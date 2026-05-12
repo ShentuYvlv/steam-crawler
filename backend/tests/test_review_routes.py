@@ -7,8 +7,9 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.core.database import get_session
+from app.core.security import create_access_token, hash_password
 from app.main import app
-from app.models import Base, ReplyDraft, SteamGame, SteamReview
+from app.models import Base, ReplyDraft, SteamGame, SteamReview, User
 
 
 async def test_review_list_filters_and_status_updates() -> None:
@@ -18,7 +19,7 @@ async def test_review_list_filters_and_status_updates() -> None:
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as seed_session:
-        seed_session.add(SteamGame(app_id=3350200, name="test game"))
+        seed_session.add(SteamGame(app_id=3350200, name="test game", game_scope="owned"))
         seed_session.add_all(
             [
                 SteamReview(
@@ -71,6 +72,7 @@ async def test_review_list_filters_and_status_updates() -> None:
                 "/api/reviews",
                 params={
                     "app_id": 3350200,
+                    "game_scope": "owned",
                     "voted_up": False,
                     "keyword": "差评",
                     "sort_by": "votes_up",
@@ -109,7 +111,7 @@ async def test_bulk_generate_reply_worker_processes_all_review_ids(monkeypatch) 
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as seed_session:
-        seed_session.add(SteamGame(app_id=3350200, name="test game"))
+        seed_session.add(SteamGame(app_id=3350200, name="test game", game_scope="owned"))
         seed_session.add_all(
             [
                 SteamReview(
@@ -191,3 +193,70 @@ async def test_bulk_generate_reply_worker_processes_all_review_ids(monkeypatch) 
     assert [draft.review_id for draft in drafts] == [1, 2]
     assert task is not None
     assert task.inserted_count == 2
+
+
+async def test_competitor_review_write_routes_are_rejected() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        seed_session.add(SteamGame(app_id=4000000, name="competitor game", game_scope="competitor"))
+        admin = User(
+            username="admin",
+            password_hash=hash_password("password123"),
+            role="admin",
+            is_active=True,
+        )
+        seed_session.add(
+            SteamReview(
+                app_id=4000000,
+                recommendation_id="c-1001",
+                steam_id="steam-c",
+                review_text="竞品评论",
+                voted_up=False,
+                votes_up=1,
+                votes_funny=0,
+                comment_count=0,
+                playtime_forever=1.5,
+                timestamp_created=datetime(2026, 4, 29, 12, tzinfo=UTC),
+                sync_type="stock",
+                source_type="csv",
+                processing_status="pending",
+                reply_status="none",
+            )
+        )
+        seed_session.add(admin)
+        await seed_session.commit()
+        token = create_access_token(admin)
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test",
+        ) as client:
+            patch_response = await client.patch(
+                "/api/reviews/1/status",
+                json={"processing_status": "ignored"},
+            )
+            generate_response = await client.post("/api/reviews/1/generate-reply")
+            send_response = await client.post(
+                "/api/reviews/1/send-reply",
+                headers={"Authorization": f"Bearer {token}"},
+                json={"confirmed": True, "content": "test"},
+            )
+            drafts_response = await client.get("/api/reviews/1/reply-drafts")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert patch_response.status_code == 403
+    assert generate_response.status_code == 403
+    assert send_response.status_code == 403
+    assert drafts_response.status_code == 403

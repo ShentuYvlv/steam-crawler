@@ -130,6 +130,7 @@ async def test_developer_reply_send_updates_record_review_and_draft() -> None:
     assert record.sent_at is not None
     assert stored_review is not None
     assert stored_review.reply_status == "replied"
+    assert stored_review.processing_status == "completed"
     assert stored_review.developer_response == "final reply content"
     assert stored_draft is not None
     assert stored_draft.content == "final reply content"
@@ -507,8 +508,65 @@ async def test_reply_records_audit_queue_returns_send_failure_message() -> None:
     assert "steam send failed" in (response.json()[0]["error_message"] or "")
 
 
+async def test_reply_records_routes_hide_competitor_games() -> None:
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as connection:
+        await connection.run_sync(Base.metadata.create_all)
+
+    session_factory = async_sessionmaker(engine, expire_on_commit=False)
+    async with session_factory() as seed_session:
+        competitor_game = SteamGame(app_id=4000000, name="competitor game", game_scope="competitor")
+        competitor_review = SteamReview(
+            app_id=4000000,
+            recommendation_id="c-1001",
+            steam_id="steam-c",
+            review_text="competitor review",
+            voted_up=False,
+            votes_up=1,
+            votes_funny=0,
+            comment_count=0,
+            timestamp_created=datetime(2026, 4, 28, 12, tzinfo=UTC),
+            sync_type="stock",
+            source_type="csv",
+            processing_status="pending",
+            reply_status="drafted",
+        )
+        competitor_draft = ReplyDraft(
+            review=competitor_review,
+            content="competitor draft",
+            status="pending_review",
+            model_name="qwen-plus",
+        )
+        competitor_reply = DeveloperReply(
+            review=competitor_review,
+            recommendation_id="c-1001",
+            content="competitor sent reply",
+            status="sent",
+        )
+        seed_session.add_all([competitor_game, competitor_review, competitor_draft, competitor_reply])
+        await seed_session.commit()
+
+    async def override_session() -> AsyncGenerator[AsyncSession, None]:
+        async with session_factory() as session:
+            yield session
+
+    app.dependency_overrides[get_session] = override_session
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            list_response = await client.get("/api/reply-records")
+            audit_response = await client.get("/api/reply-records/audit-queue")
+    finally:
+        app.dependency_overrides.clear()
+        await engine.dispose()
+
+    assert list_response.status_code == 200
+    assert list_response.json() == []
+    assert audit_response.status_code == 200
+    assert audit_response.json() == []
+
+
 async def seed_review_with_draft(session: AsyncSession) -> tuple[SteamReview, ReplyDraft]:
-    session.add(SteamGame(app_id=3350200, name="test game"))
+    session.add(SteamGame(app_id=3350200, name="test game", game_scope="owned"))
     review = SteamReview(
         app_id=3350200,
         recommendation_id="1001",

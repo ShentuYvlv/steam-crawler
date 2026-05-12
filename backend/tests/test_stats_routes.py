@@ -16,8 +16,13 @@ async def test_stats_overview_and_timeseries() -> None:
 
     session_factory = async_sessionmaker(engine, expire_on_commit=False)
     async with session_factory() as seed_session:
-        seed_session.add(SteamGame(app_id=3350200, name="test game"))
-        review = SteamReview(
+        seed_session.add_all(
+            [
+                SteamGame(app_id=3350200, name="test game", game_scope="owned"),
+                SteamGame(app_id=4000000, name="competitor game", game_scope="competitor"),
+            ]
+        )
+        owned_review = SteamReview(
             app_id=3350200,
             recommendation_id="1001",
             review_text="测试评论",
@@ -31,12 +36,26 @@ async def test_stats_overview_and_timeseries() -> None:
             processing_status="pending",
             reply_status="replied",
         )
-        seed_session.add(review)
+        competitor_review = SteamReview(
+            app_id=4000000,
+            recommendation_id="2001",
+            review_text="竞品评论",
+            voted_up=False,
+            votes_up=1,
+            votes_funny=0,
+            comment_count=0,
+            timestamp_created=datetime.now(tz=UTC),
+            sync_type="stock",
+            source_type="csv",
+            processing_status="pending",
+            reply_status="none",
+        )
+        seed_session.add_all([owned_review, competitor_review])
         await seed_session.flush()
         seed_session.add(
             DeveloperReply(
-                review_id=review.id,
-                recommendation_id=review.recommendation_id,
+                review_id=owned_review.id,
+                recommendation_id=owned_review.recommendation_id,
                 content="回复",
                 status="sent",
                 sent_at=datetime.now(tz=UTC),
@@ -53,6 +72,8 @@ async def test_stats_overview_and_timeseries() -> None:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             overview_response = await client.get("/api/stats/overview")
             timeseries_response = await client.get("/api/stats/timeseries?days=3")
+            competitor_response = await client.get("/api/stats/overview?scope=competitor")
+            scoped_game_response = await client.get("/api/stats/overview?scope=owned&app_id=3350200")
     finally:
         app.dependency_overrides.clear()
         await engine.dispose()
@@ -62,3 +83,7 @@ async def test_stats_overview_and_timeseries() -> None:
     assert overview_response.json()["positive_rate"] == 1
     assert timeseries_response.status_code == 200
     assert len(timeseries_response.json()["items"]) == 3
+    assert competitor_response.status_code == 200
+    assert competitor_response.json()["total_reviews"] == 1
+    assert scoped_game_response.status_code == 200
+    assert scoped_game_response.json()["total_reviews"] == 1

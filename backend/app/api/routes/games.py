@@ -29,10 +29,11 @@ async def list_games(session: SessionDependency) -> list[GameListItem]:
         select(
             SteamGame.app_id,
             SteamGame.name,
+            SteamGame.game_scope,
             func.count(SteamReview.id).label("review_count"),
         )
         .outerjoin(SteamReview, SteamReview.app_id == SteamGame.app_id)
-        .group_by(SteamGame.app_id, SteamGame.name)
+        .group_by(SteamGame.app_id, SteamGame.name, SteamGame.game_scope)
         .order_by(func.lower(func.coalesce(SteamGame.name, "")), SteamGame.app_id)
     )
     schedule_result = await session.execute(
@@ -56,13 +57,14 @@ async def list_games(session: SessionDependency) -> list[GameListItem]:
         latest_job_by_app_id[job.app_id] = job
 
     items: list[GameListItem] = []
-    for app_id, name, review_count in games_result.all():
+    for app_id, name, game_scope, review_count in games_result.all():
         schedule = schedules_by_app_id.get(app_id)
         latest_job = latest_job_by_app_id.get(app_id)
         items.append(
-            GameListItem(
-                app_id=app_id,
-                name=name,
+                GameListItem(
+                    app_id=app_id,
+                    name=name,
+                    game_scope=game_scope,
                 review_count=review_count,
                 has_schedule=schedule is not None,
                 schedule_id=schedule.id if schedule else None,
@@ -88,7 +90,7 @@ async def create_game(
     if existing is not None:
         raise HTTPException(status_code=409, detail="Game already exists")
 
-    game = SteamGame(app_id=request.app_id, name=request.name)
+    game = SteamGame(app_id=request.app_id, name=request.name, game_scope=request.game_scope)
     session.add(game)
     schedule = None
     if request.sync is not None:
@@ -110,6 +112,7 @@ async def create_game(
     return GameListItem(
         app_id=game.app_id,
         name=game.name,
+        game_scope=game.game_scope,
         review_count=0,
         has_schedule=schedule is not None,
         schedule_id=schedule.id if schedule else None,
@@ -135,6 +138,7 @@ async def update_game(
         raise HTTPException(status_code=404, detail="Game not found")
 
     game.name = request.name
+    game.game_scope = request.game_scope
     schedule_result = await session.execute(
         select(TaskSchedule).where(
             TaskSchedule.task_type == "steam_review_sync",
@@ -175,6 +179,7 @@ async def update_game(
     return GameListItem(
         app_id=game.app_id,
         name=game.name,
+        game_scope=game.game_scope,
         review_count=review_count,
         has_schedule=schedule is not None,
         schedule_id=schedule.id if schedule else None,

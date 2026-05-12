@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import get_settings
 from app.core.error_utils import format_exception_message
-from app.models import ReplyDraft, ReplyStrategy, SteamReview
+from app.models import ReplyDraft, ReplyStrategy, SteamGame, SteamReview
 from app.services.aliyun_client import AliyunChatClient, AliyunChatOptions
 from app.services.reply_skill import resolve_reply_skill_content
 
@@ -43,6 +43,9 @@ class ReplyGenerationService:
         review = await self.session.get(SteamReview, review_id)
         if review is None:
             raise ReplyGenerationError("Review not found")
+        game = await self.session.get(SteamGame, review.app_id)
+        if game is None or game.game_scope != "owned":
+            raise ReplyGenerationError("Competitor games do not support reply operations")
 
         strategy = await self._get_active_strategy()
         if strategy is None:

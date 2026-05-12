@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import AsyncSessionLocal
 from app.core.config import REPO_ROOT, get_settings
 from app.core.error_utils import format_exception_message
-from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamReview
+from app.models import DeveloperReply, OperationLog, ReplyDraft, SteamGame, SteamReview
 
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 logger = logging.getLogger(__name__)
@@ -117,6 +117,9 @@ class DeveloperReplyService:
         review = await self.session.get(SteamReview, review_id)
         if review is None:
             raise DeveloperReplyError("Review not found")
+        game = await self.session.get(SteamGame, review.app_id)
+        if game is None or game.game_scope != "owned":
+            raise DeveloperReplyError("Competitor games do not support reply operations")
 
         blocking_record = await self._find_blocking_record(review.id)
         if blocking_record is not None and blocking_record.status == "pending":

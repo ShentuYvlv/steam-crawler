@@ -43,6 +43,7 @@ const selectedReviewGameKey = "steam_reviews_selected_app_id";
 
 const defaultFilters: ReviewQuery = {
   app_id: "",
+  game_scope: "owned",
   review_group: "pending",
   voted_up: "",
   min_votes_up: "",
@@ -149,23 +150,32 @@ function ReviewsPage() {
   }, [filters.page_size, reviewsQuery.data?.total]);
 
   const items = reviewsQuery.data?.items ?? [];
+  const filteredGames = useMemo(
+    () =>
+      (gamesQuery.data ?? []).filter(
+        (game) => game.game_scope === (filters.game_scope === "competitor" ? "competitor" : "owned")
+      ),
+    [filters.game_scope, gamesQuery.data]
+  );
+  const isCompetitorView = filters.game_scope === "competitor";
   const activeFilters = getActiveFilters(filters, gamesQuery.data ?? []);
   const allCurrentPageSelected =
     items.length > 0 && items.every((item) => selectedIds.includes(item.id));
 
   useEffect(() => {
-    if ((gamesQuery.data?.length ?? 0) === 0) {
+    if (filteredGames.length === 0) {
+      setFilters((current) => ({ ...current, app_id: "" }));
       return;
     }
     const selectedAppId = filters.app_id;
-    const hasSelectedGame = !!selectedAppId && gamesQuery.data?.some((game) => String(game.app_id) === selectedAppId);
+    const hasSelectedGame = !!selectedAppId && filteredGames.some((game) => String(game.app_id) === selectedAppId);
     if (!hasSelectedGame) {
       setFilters((current) => ({
         ...current,
-        app_id: String(gamesQuery.data?.[0]?.app_id ?? "")
+        app_id: String(filteredGames[0]?.app_id ?? "")
       }));
     }
-  }, [filters.app_id, gamesQuery.data]);
+  }, [filteredGames, filters.app_id]);
 
   useEffect(() => {
     if (!filters.app_id) {
@@ -180,7 +190,7 @@ function ReviewsPage() {
   useEffect(() => {
     setSelectedIds([]);
     setActiveReviewId(null);
-  }, [filters.app_id]);
+  }, [filters.app_id, filters.game_scope]);
 
   function updateFilter(key: keyof ReviewQuery, value: string | number) {
     setFilters((current) => ({ ...current, [key]: value, page: 1 }));
@@ -190,6 +200,7 @@ function ReviewsPage() {
     setFilters({
       ...defaultFilters,
       app_id: filters.app_id,
+      game_scope: filters.game_scope ?? defaultFilters.game_scope,
       review_group: filters.review_group ?? defaultFilters.review_group
     });
     setSelectedIds([]);
@@ -276,6 +287,33 @@ function ReviewsPage() {
 
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
           <div className="sm:col-span-2 xl:col-span-6">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">游戏视图</span>
+            <div className="mt-2 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm shadow-slate-100">
+              <button
+                type="button"
+                className={
+                  !isCompetitorView
+                    ? "rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                    : "rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                }
+                onClick={() => updateFilter("game_scope", "owned")}
+              >
+                自家游戏
+              </button>
+              <button
+                type="button"
+                className={
+                  isCompetitorView
+                    ? "rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white"
+                    : "rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-900"
+                }
+                onClick={() => updateFilter("game_scope", "competitor")}
+              >
+                竞品
+              </button>
+            </div>
+          </div>
+          <div className="sm:col-span-2 xl:col-span-6">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">评论分组</span>
             <div className="mt-2 inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm shadow-slate-100">
               <button
@@ -303,7 +341,7 @@ function ReviewsPage() {
             </div>
           </div>
           <GameSwitchField
-            games={gamesQuery.data ?? []}
+            games={filteredGames}
             value={filters.app_id}
             onChange={(value) => updateFilter("app_id", value)}
           />
@@ -404,45 +442,53 @@ function ReviewsPage() {
         ) : null}
       </section>
 
-      <section className="app-card mt-5 flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
-        <div>
-          <p className="text-sm font-semibold text-slate-900">批量操作</p>
-          <p className="mt-1 text-xs text-slate-500">
-            已选择 {selectedIds.length} 条评论，可批量调整处理状态。
-          </p>
+      {!isCompetitorView ? (
+        <section className="app-card mt-5 flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+          <div>
+            <p className="text-sm font-semibold text-slate-900">批量操作</p>
+            <p className="mt-1 text-xs text-slate-500">
+              已选择 {selectedIds.length} 条评论，可批量调整处理状态。
+            </p>
+            {draftNotice ? <p className="mt-2 text-xs font-medium text-blue-700">{draftNotice}</p> : null}
+          </div>
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1 sm:flex-none"
+              disabled={selectedIds.length === 0 || bulkGenerateDraftMutation.isPending}
+              onClick={() => bulkGenerateDraftMutation.mutate([...selectedIds])}
+            >
+              <Sparkles className="h-4 w-4" aria-hidden="true" />
+              批量生成草稿
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 sm:flex-none"
+              disabled={selectedIds.length === 0 || bulkStatusMutation.isPending}
+              onClick={() => bulkStatusMutation.mutate("on_hold")}
+            >
+              标记待定
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              className="flex-1 sm:flex-none"
+              disabled={selectedIds.length === 0 || bulkStatusMutation.isPending}
+              onClick={() => bulkStatusMutation.mutate("ignored")}
+            >
+              忽略
+            </Button>
+          </div>
+        </section>
+      ) : (
+        <section className="app-card mt-5 px-4 py-4 sm:px-5">
+          <p className="text-sm font-semibold text-slate-900">竞品视图</p>
+          <p className="mt-1 text-xs text-slate-500">竞品评论仅支持查看、筛选、详情和导出，不提供回复或状态修改。</p>
           {draftNotice ? <p className="mt-2 text-xs font-medium text-blue-700">{draftNotice}</p> : null}
-        </div>
-        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-          <Button
-            type="button"
-            variant="secondary"
-            className="flex-1 sm:flex-none"
-            disabled={selectedIds.length === 0 || bulkGenerateDraftMutation.isPending}
-            onClick={() => bulkGenerateDraftMutation.mutate([...selectedIds])}
-          >
-            <Sparkles className="h-4 w-4" aria-hidden="true" />
-            批量生成草稿
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            className="flex-1 sm:flex-none"
-            disabled={selectedIds.length === 0 || bulkStatusMutation.isPending}
-            onClick={() => bulkStatusMutation.mutate("on_hold")}
-          >
-            标记待定
-          </Button>
-          <Button
-            type="button"
-            variant="danger"
-            className="flex-1 sm:flex-none"
-            disabled={selectedIds.length === 0 || bulkStatusMutation.isPending}
-            onClick={() => bulkStatusMutation.mutate("ignored")}
-          >
-            忽略
-          </Button>
-        </div>
-      </section>
+        </section>
+      )}
 
       <section className="mt-5">
         <div className="app-card overflow-hidden">
@@ -458,7 +504,7 @@ function ReviewsPage() {
           <div className="hidden md:block">
             <table className="w-full table-fixed border-collapse text-left text-sm">
               <colgroup>
-                <col className="w-12" />
+                {!isCompetitorView ? <col className="w-12" /> : null}
                 <col className="w-24" />
                 <col />
                 <col className="w-24" />
@@ -468,14 +514,16 @@ function ReviewsPage() {
               </colgroup>
               <thead className="bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="w-12 px-5 py-4">
-                    <input
-                      className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      type="checkbox"
-                      checked={allCurrentPageSelected}
-                      onChange={toggleCurrentPage}
-                    />
-                  </th>
+                  {!isCompetitorView ? (
+                    <th className="w-12 px-5 py-4">
+                      <input
+                        className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        type="checkbox"
+                        checked={allCurrentPageSelected}
+                        onChange={toggleCurrentPage}
+                      />
+                    </th>
+                  ) : null}
                   <th className="px-4 py-4">评价</th>
                   <th className="px-4 py-4">评论内容</th>
                   <th className="px-4 py-4">互动</th>
@@ -490,6 +538,7 @@ function ReviewsPage() {
                   <Fragment key={item.id}>
                     <ReviewRow
                       item={item}
+                      showSelection={!isCompetitorView}
                       selected={selectedIds.includes(item.id)}
                       active={activeReviewId === item.id}
                       onToggle={() => toggleReview(item.id)}
@@ -500,6 +549,8 @@ function ReviewsPage() {
                     {activeReviewId === item.id ? (
                       <ExpandedReviewDetailRow
                         review={detailQuery.data}
+                        readOnly={isCompetitorView}
+                        showSelection={!isCompetitorView}
                         loading={detailQuery.isLoading}
                         busy={singleStatusMutation.isPending}
                         generating={generateDraftMutation.isPending}
@@ -525,6 +576,7 @@ function ReviewsPage() {
               <Fragment key={item.id}>
                 <MobileReviewCard
                   item={item}
+                  showSelection={!isCompetitorView}
                   selected={selectedIds.includes(item.id)}
                   active={activeReviewId === item.id}
                   onToggle={() => toggleReview(item.id)}
@@ -535,6 +587,7 @@ function ReviewsPage() {
                 {activeReviewId === item.id ? (
                   <MobileExpandedReviewDetail
                     review={detailQuery.data}
+                    readOnly={isCompetitorView}
                     loading={detailQuery.isLoading}
                     busy={singleStatusMutation.isPending}
                     generating={generateDraftMutation.isPending}
@@ -603,12 +656,14 @@ function MetricCard({ label, value, accent = false }: { label: string; value: nu
 
 function ReviewRow({
   item,
+  showSelection,
   selected,
   active,
   onToggle,
   onOpen
 }: {
   item: ReviewListItem;
+  showSelection: boolean;
   selected: boolean;
   active: boolean;
   onToggle: () => void;
@@ -616,14 +671,16 @@ function ReviewRow({
 }) {
   return (
     <tr className={active ? "bg-blue-50/70" : "bg-white transition-colors hover:bg-blue-50/25"}>
-      <td className="px-5 py-4">
-        <input
-          className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-          type="checkbox"
-          checked={selected}
-          onChange={onToggle}
-        />
-      </td>
+      {showSelection ? (
+        <td className="px-5 py-4">
+          <input
+            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+            type="checkbox"
+            checked={selected}
+            onChange={onToggle}
+          />
+        </td>
+      ) : null}
       <td className="px-4 py-4">
         <ReviewSentiment votedUp={item.voted_up} />
       </td>
@@ -680,12 +737,14 @@ function ReviewRow({
 
 function MobileReviewCard({
   item,
+  showSelection,
   selected,
   active,
   onToggle,
   onOpen
 }: {
   item: ReviewListItem;
+  showSelection: boolean;
   selected: boolean;
   active: boolean;
   onToggle: () => void;
@@ -701,12 +760,14 @@ function MobileReviewCard({
     >
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
-          <input
-            className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-            type="checkbox"
-            checked={selected}
-            onChange={onToggle}
-          />
+          {showSelection ? (
+            <input
+              className="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+              type="checkbox"
+              checked={selected}
+              onChange={onToggle}
+            />
+          ) : null}
           <ReviewSentiment votedUp={item.voted_up} />
         </div>
         <StatusBadge status={resolveProcessingStatus(item.processing_status, item.reply_status)} />
@@ -750,6 +811,8 @@ function MiniStat({ label, value }: { label: string; value: string | number }) {
 
 function ExpandedReviewDetailRow({
   review,
+  readOnly,
+  showSelection,
   loading,
   busy,
   generating,
@@ -757,6 +820,8 @@ function ExpandedReviewDetailRow({
   onGenerate
 }: {
   review: ReviewDetail | undefined;
+  readOnly: boolean;
+  showSelection: boolean;
   loading: boolean;
   busy: boolean;
   generating: boolean;
@@ -765,9 +830,10 @@ function ExpandedReviewDetailRow({
 }) {
   return (
     <tr className="bg-slate-50/70">
-      <td colSpan={7} className="px-5 py-5">
+      <td colSpan={showSelection ? 7 : 6} className="px-5 py-5">
         <InlineReviewDetail
           review={review}
+          readOnly={readOnly}
           loading={loading}
           busy={busy}
           generating={generating}
@@ -781,6 +847,7 @@ function ExpandedReviewDetailRow({
 
 function MobileExpandedReviewDetail({
   review,
+  readOnly,
   loading,
   busy,
   generating,
@@ -788,6 +855,7 @@ function MobileExpandedReviewDetail({
   onGenerate
 }: {
   review: ReviewDetail | undefined;
+  readOnly: boolean;
   loading: boolean;
   busy: boolean;
   generating: boolean;
@@ -797,6 +865,7 @@ function MobileExpandedReviewDetail({
   return (
     <InlineReviewDetail
       review={review}
+      readOnly={readOnly}
       loading={loading}
       busy={busy}
       generating={generating}
@@ -808,6 +877,7 @@ function MobileExpandedReviewDetail({
 
 function InlineReviewDetail({
   review,
+  readOnly,
   loading,
   busy,
   generating,
@@ -815,6 +885,7 @@ function InlineReviewDetail({
   onGenerate
 }: {
   review: ReviewDetail | undefined;
+  readOnly: boolean;
   loading: boolean;
   busy: boolean;
   generating: boolean;
@@ -841,6 +912,7 @@ function InlineReviewDetail({
     <div className="rounded-2xl border border-blue-100 bg-white p-5 shadow-sm shadow-blue-50">
       <ReviewDetailPanel
         review={review}
+        readOnly={readOnly}
         busy={busy}
         generating={generating}
         onMark={onMark}
@@ -852,12 +924,14 @@ function InlineReviewDetail({
 
 function ReviewDetailPanel({
   review,
+  readOnly,
   busy,
   generating,
   onMark,
   onGenerate
 }: {
   review: ReviewDetail;
+  readOnly: boolean;
   busy: boolean;
   generating: boolean;
   onMark: (status: string) => void;
@@ -906,16 +980,24 @@ function ReviewDetailPanel({
         </div>
       ) : null}
 
-      <ReplyDraftAuditPanel review={review} fallbackGenerating={generating} onFallbackGenerate={onGenerate} />
+      {readOnly ? (
+        <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 text-sm text-slate-600">
+          竞品视图仅支持查看评论详情和导出，不提供草稿生成、回复发送或状态修改。
+        </div>
+      ) : (
+        <>
+          <ReplyDraftAuditPanel review={review} fallbackGenerating={generating} onFallbackGenerate={onGenerate} />
 
-      <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-5">
-        <Button type="button" variant="outline" disabled={busy} onClick={() => onMark("on_hold")}>
-          标记待定
-        </Button>
-        <Button type="button" variant="danger" disabled={busy} onClick={() => onMark("ignored")}>
-          忽略
-        </Button>
-      </div>
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-5">
+            <Button type="button" variant="outline" disabled={busy} onClick={() => onMark("on_hold")}>
+              标记待定
+            </Button>
+            <Button type="button" variant="danger" disabled={busy} onClick={() => onMark("ignored")}>
+              忽略
+            </Button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -1246,6 +1328,8 @@ function GameSwitchField({
 
 function getActiveFilters(filters: ReviewQuery, games: GameListItem[]) {
   const chips: string[] = [];
+  if (filters.game_scope === "owned") chips.push("自家游戏");
+  if (filters.game_scope === "competitor") chips.push("竞品");
   if (filters.app_id) {
     const selectedGame = games.find((game) => String(game.app_id) === filters.app_id);
     chips.push(selectedGame?.name ? `${selectedGame.name} · App ${filters.app_id}` : `App ${filters.app_id}`);

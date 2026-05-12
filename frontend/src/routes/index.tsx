@@ -1,15 +1,37 @@
 import { useQuery } from "@tanstack/react-query";
 import { createRoute } from "@tanstack/react-router";
 import { BarChart3, CheckCircle2, MessageSquareReply, ThumbsUp } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
-import { fetchStatsOverview, fetchStatsTimeseries } from "@/lib/api";
+import { fetchGames, fetchStatsOverview, fetchStatsTimeseries } from "@/lib/api";
 import { rootRoute } from "@/routes/__root";
 
 function DashboardHome() {
-  const overviewQuery = useQuery({ queryKey: ["stats-overview"], queryFn: fetchStatsOverview });
+  const [selectedOwnedAppId, setSelectedOwnedAppId] = useState<number | null>(null);
+  const gamesQuery = useQuery({ queryKey: ["games"], queryFn: fetchGames });
+  const ownedGames = useMemo(
+    () => (gamesQuery.data ?? []).filter((game) => game.game_scope === "owned"),
+    [gamesQuery.data]
+  );
+
+  useEffect(() => {
+    if (ownedGames.length === 0) {
+      setSelectedOwnedAppId(null);
+      return;
+    }
+    if (selectedOwnedAppId !== null && ownedGames.some((game) => game.app_id === selectedOwnedAppId)) {
+      return;
+    }
+    setSelectedOwnedAppId(null);
+  }, [ownedGames, selectedOwnedAppId]);
+
+  const overviewQuery = useQuery({
+    queryKey: ["stats-overview", "owned", selectedOwnedAppId],
+    queryFn: () => fetchStatsOverview({ scope: "owned", app_id: selectedOwnedAppId })
+  });
   const timeseriesQuery = useQuery({
-    queryKey: ["stats-timeseries", 14],
-    queryFn: () => fetchStatsTimeseries(14)
+    queryKey: ["stats-timeseries", 14, "owned", selectedOwnedAppId],
+    queryFn: () => fetchStatsTimeseries(14, { scope: "owned", app_id: selectedOwnedAppId })
   });
   const overview = overviewQuery.data;
   const timeseries = timeseriesQuery.data?.items ?? [];
@@ -20,8 +42,27 @@ function DashboardHome() {
         <p className="text-sm font-medium text-blue-700">Steam Review Admin</p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-slate-950">运营统计总览</h1>
         <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-500">
-          汇总评论处理进度、回复发送质量和近 14 天新增趋势。
+          仅统计自家游戏的评论处理进度、回复发送质量和近 14 天新增趋势。
         </p>
+        <div className="mt-4">
+          <label className="flex max-w-xs flex-col gap-2 text-sm">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">总览范围</span>
+            <select
+              className="form-input"
+              value={selectedOwnedAppId === null ? "all" : String(selectedOwnedAppId)}
+              onChange={(event) =>
+                setSelectedOwnedAppId(event.target.value === "all" ? null : Number(event.target.value))
+              }
+            >
+              <option value="all">全部自家游戏</option>
+              {ownedGames.map((game) => (
+                <option key={game.app_id} value={game.app_id}>
+                  {game.name || `App ${game.app_id}`}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </section>
 
       <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">

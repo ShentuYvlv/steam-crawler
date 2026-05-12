@@ -13,7 +13,7 @@ from src.utils.task_control import TaskCancelledError
 from app.core.database import AsyncSessionLocal, get_session
 from app.core.error_utils import format_exception_details
 from app.core.security import RequireOperator
-from app.models import ReplyDraft, SteamReview, SyncJob
+from app.models import ReplyDraft, SteamGame, SteamReview, SyncJob
 from app.schemas import (
     BulkGenerateReplyRequest,
     BulkGenerateReplyResponse,
@@ -57,6 +57,7 @@ SessionDependency = Annotated[AsyncSession, Depends(get_session)]
 async def list_reviews(
     session: SessionDependency,
     app_id: int | None = Query(default=None, gt=0),
+    game_scope: str | None = Query(default=None, pattern="^(owned|competitor)$"),
     review_group: str | None = Query(default=None, pattern="^(pending|replied)$"),
     voted_up: bool | None = None,
     min_votes_up: int | None = Query(default=None, ge=0),
@@ -76,6 +77,7 @@ async def list_reviews(
     statement = _apply_review_filters(
         select(SteamReview),
         app_id=app_id,
+        game_scope=game_scope,
         review_group=review_group,
         voted_up=voted_up,
         min_votes_up=min_votes_up,
@@ -91,6 +93,7 @@ async def list_reviews(
     count_statement = _apply_review_filters(
         select(func.count(SteamReview.id)),
         app_id=app_id,
+        game_scope=game_scope,
         review_group=review_group,
         voted_up=voted_up,
         min_votes_up=min_votes_up,
@@ -124,6 +127,7 @@ async def export_reviews_excel(
     session: SessionDependency,
     app_id: int | None = Query(default=None, gt=0),
     export_scope: str = Query(default="current", pattern="^(current|all)$"),
+    game_scope: str | None = Query(default=None, pattern="^(owned|competitor)$"),
     review_group: str | None = Query(default=None, pattern="^(pending|replied)$"),
     voted_up: bool | None = None,
     min_votes_up: int | None = Query(default=None, ge=0),
@@ -142,6 +146,7 @@ async def export_reviews_excel(
         statement = _apply_review_filters(
             select(SteamReview),
             app_id=app_id,
+            game_scope=game_scope,
             review_group=None,
             voted_up=None,
             min_votes_up=None,
@@ -158,6 +163,7 @@ async def export_reviews_excel(
         statement = _apply_review_filters(
             select(SteamReview),
             app_id=app_id,
+            game_scope=game_scope,
             review_group=review_group,
             voted_up=voted_up,
             min_votes_up=min_votes_up,
@@ -325,6 +331,7 @@ async def bulk_update_review_status(
     request: BulkReviewStatusUpdateRequest,
     session: SessionDependency,
 ) -> ReviewStatusUpdateResponse:
+    await _ensure_reviews_are_owned(session, request.review_ids)
     values = _status_update_values(request)
     if not values:
         raise HTTPException(status_code=400, detail="No status fields provided")
@@ -343,6 +350,7 @@ async def bulk_generate_reply(
     session: SessionDependency,
 ) -> BulkGenerateReplyResponse:
     review_ids = list(request.review_ids)
+    await _ensure_reviews_are_owned(session, review_ids)
     task = await _create_background_task(
         session,
         job_type="bulk_reply_generation",
@@ -362,6 +370,7 @@ async def generate_reply(
     review_id: int,
     session: SessionDependency,
 ) -> GenerateReplyResponse:
+    await _ensure_review_is_owned(session, review_id)
     service = ReplyGenerationService(session)
     try:
         result = await service.generate_for_review(review_id)
@@ -392,6 +401,7 @@ async def send_reply(
     session: SessionDependency,
     current_user: RequireOperator,
 ) -> SendReplyResponse:
+    await _ensure_review_is_owned(session, review_id)
     service = DeveloperReplyService(session)
     try:
         record = await service.queue_reply(
@@ -425,6 +435,7 @@ async def bulk_send_reply(
 ) -> BulkSendReplyResponse:
     if not request.confirmed:
         raise HTTPException(status_code=400, detail="Bulk send requires confirmation")
+    await _ensure_reviews_are_owned(session, request.review_ids)
     task = await _create_background_task(
         session,
         job_type="bulk_developer_reply_send",
@@ -452,6 +463,7 @@ async def list_review_reply_drafts(
     review = await session.get(SteamReview, review_id)
     if review is None:
         raise HTTPException(status_code=404, detail="Review not found")
+    await _ensure_review_is_owned(session, review_id)
     result = await session.execute(
         select(ReplyDraft)
         .where(ReplyDraft.review_id == review_id)
@@ -477,6 +489,7 @@ async def update_review_status(
     request: ReviewStatusUpdateRequest,
     session: SessionDependency,
 ) -> ReviewStatusUpdateResponse:
+    await _ensure_review_is_owned(session, review_id)
     values = _status_update_values(request)
     if not values:
         raise HTTPException(status_code=400, detail="No status fields provided")
@@ -681,6 +694,7 @@ def _apply_review_filters(
     statement: Select,
     *,
     app_id: int | None,
+    game_scope: str | None,
     review_group: str | None,
     voted_up: bool | None,
     min_votes_up: int | None,
@@ -693,8 +707,12 @@ def _apply_review_filters(
     reply_status: str | None,
     keyword: str | None,
 ) -> Select:
+    if game_scope is not None:
+        statement = statement.join(SteamGame, SteamGame.app_id == SteamReview.app_id)
     if app_id is not None:
         statement = statement.where(SteamReview.app_id == app_id)
+    if game_scope is not None:
+        statement = statement.where(SteamGame.game_scope == game_scope)
     if review_group == "pending":
         statement = statement.where(SteamReview.reply_status != "replied")
     if review_group == "replied":
@@ -762,3 +780,38 @@ def _build_review_export_filename(app_id: int | None, export_scope: str) -> str:
     app_label = f"app{app_id}" if app_id is not None else "all"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"steam评论列表_{app_label}_{scope_label}_{timestamp}.xlsx"
+
+
+async def _ensure_review_is_owned(session: AsyncSession, review_id: int) -> None:
+    result = await session.execute(
+        select(SteamGame.game_scope)
+        .select_from(SteamReview)
+        .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
+        .where(SteamReview.id == review_id)
+        .limit(1)
+    )
+    game_scope = result.scalar_one_or_none()
+    if game_scope is None:
+        raise HTTPException(status_code=404, detail="Review not found")
+    if game_scope != "owned":
+        raise HTTPException(status_code=403, detail="Competitor games do not support reply operations")
+
+
+async def _ensure_reviews_are_owned(session: AsyncSession, review_ids: list[int]) -> None:
+    if not review_ids:
+        return
+    result = await session.execute(
+        select(SteamReview.id, SteamGame.game_scope)
+        .select_from(SteamReview)
+        .join(SteamGame, SteamGame.app_id == SteamReview.app_id)
+        .where(SteamReview.id.in_(review_ids))
+    )
+    scope_by_review_id = {review_id: game_scope for review_id, game_scope in result.all()}
+    missing_review_ids = [review_id for review_id in review_ids if review_id not in scope_by_review_id]
+    if missing_review_ids:
+        raise HTTPException(status_code=404, detail="Review not found")
+    competitor_review_ids = [
+        review_id for review_id, game_scope in scope_by_review_id.items() if game_scope != "owned"
+    ]
+    if competitor_review_ids:
+        raise HTTPException(status_code=403, detail="Competitor games do not support reply operations")

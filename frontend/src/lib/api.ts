@@ -26,6 +26,7 @@ export type User = {
 export type GameListItem = {
   app_id: number;
   name: string | null;
+  game_scope: "owned" | "competitor";
   review_count: number;
   has_schedule: boolean;
   schedule_id: number | null;
@@ -52,6 +53,7 @@ export type GameSyncOptionsPayload = {
 export type GamePayload = {
   app_id?: number;
   name: string;
+  game_scope?: "owned" | "competitor";
   sync?: GameSyncOptionsPayload | null;
 };
 
@@ -116,6 +118,7 @@ export type ReviewListResponse = {
 
 export type ReviewQuery = {
   app_id?: string;
+  game_scope?: string;
   review_group?: string;
   voted_up?: string;
   min_votes_up?: string;
@@ -283,6 +286,8 @@ export type TaskSchedule = {
   updated_at: string;
 };
 
+export type StatsScope = "owned" | "competitor" | "all";
+
 export type StatsOverview = {
   total_reviews: number;
   positive_reviews: number;
@@ -347,12 +352,37 @@ export async function updateUser(
   });
 }
 
-export async function fetchStatsOverview(): Promise<StatsOverview> {
-  return apiGet<StatsOverview>("/stats/overview");
+export async function fetchStatsOverview(params: {
+  scope?: StatsScope;
+  app_id?: number | null;
+} = {}): Promise<StatsOverview> {
+  const query = new URLSearchParams();
+  if (params.scope) {
+    query.set("scope", params.scope);
+  }
+  if (params.app_id) {
+    query.set("app_id", String(params.app_id));
+  }
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return apiGet<StatsOverview>(`/stats/overview${suffix}`);
 }
 
-export async function fetchStatsTimeseries(days = 14): Promise<StatsTimeseries> {
-  return apiGet<StatsTimeseries>(`/stats/timeseries?days=${days}`);
+export async function fetchStatsTimeseries(
+  days = 14,
+  params: {
+    scope?: StatsScope;
+    app_id?: number | null;
+  } = {}
+): Promise<StatsTimeseries> {
+  const query = new URLSearchParams();
+  query.set("days", String(days));
+  if (params.scope) {
+    query.set("scope", params.scope);
+  }
+  if (params.app_id) {
+    query.set("app_id", String(params.app_id));
+  }
+  return apiGet<StatsTimeseries>(`/stats/timeseries?${query.toString()}`);
 }
 
 export async function fetchGames(): Promise<GameListItem[]> {

@@ -17,6 +17,7 @@ class SteamGame(TimestampMixin, Base):
 
     app_id: Mapped[int] = mapped_column(Integer, primary_key=True)
     name: Mapped[str | None] = mapped_column(String(255), index=True)
+    game_scope: Mapped[str] = mapped_column(String(32), default="competitor", nullable=False)
     release_date: Mapped[str | None] = mapped_column(String(80))
     price: Mapped[str | None] = mapped_column(String(80))
     developers: Mapped[list[str] | None] = mapped_column(JSON)
